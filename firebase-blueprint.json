@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "User profile document containing role, point balance, daily streak, and parent/student links.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "parent"] },
+        "username": { "type": "string" },
+        "points": { "type": "number" },
+        "streak": { "type": "number" },
+        "dailyGoalMinutes": { "type": "number" },
+        "linkedParentId": { "type": "string" },
+        "linkedStudentId": { "type": "string" }
+      },
+      "required": ["uid", "email", "role", "username", "points", "streak", "dailyGoalMinutes"]
+    },
+    "focusSession": {
+      "title": "FocusSession",
+      "description": "Log of an individual focus block completed or interrupted by a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "durationMinutes": { "type": "number" },
+        "elapsedSeconds": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "paused", "completed", "interrupted"] },
+        "strikes": { "type": "number" },
+        "pointsEarned": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "durationMinutes", "elapsedSeconds", "status", "strikes", "pointsEarned", "createdAt"]
+    },
+    "distractionAttempt": {
+      "title": "DistractionAttempt",
+      "description": "Logged occurrence of a shielded block attempt when student launches a restricted app.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "appName": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "studentId", "appName", "timestamp"]
+    },
+    "blockedApp": {
+      "title": "BlockedApp",
+      "description": "Individual application restriction rule.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "packageName": { "type": "string" },
+        "icon": { "type": "string" },
+        "isBlocked": { "type": "boolean" }
+      },
+      "required": ["id", "name", "packageName", "icon", "isBlocked"]
+    },
+    "pairingCode": {
+      "title": "PairingCode",
+      "description": "Temporary 6-digit code created by parent for linking accounts securely with a 10-minute expiry.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "parentId": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "attemptsCount": { "type": "number" }
+      },
+      "required": ["code", "parentId", "expiresAt", "attemptsCount"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "User profiles for parents and students."
+    },
+    "/users/{userId}/blockedApps/{appId}": {
+      "schema": "blockedApp",
+      "description": "Subcollection storing blocked applications configurations for a student."
+    },
+    "/focusSessions/{sessionId}": {
+      "schema": "focusSession",
+      "description": "Historical focus sessions across all students."
+    },
+    "/distractionAttempts/{attemptId}": {
+      "schema": "distractionAttempt",
+      "description": "Logs of prevented applications launch events during active timers."
+    },
+    "/pairingCodes/{code}": {
+      "schema": "pairingCode",
+      "description": "Active parent codes available for pairing links."
+    }
+  }
+}

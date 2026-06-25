@@ -1,0 +1,6 @@
+{
+  "name": "FocusLoop",
+  "description": "An elegant, high-fidelity focus timer with parent-student real-time synchronization, 3-strike grace detection, points gamification, and weekly leaderboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
