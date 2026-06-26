@@ -72,7 +72,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       }
     } catch (error: any) {
       console.error('Auth action failed:', error);
-      setErrorMsg('An unexpected error occurred. Please try again.');
+      setErrorMsg(`An unexpected error occurred: ${error.message}`);
     } finally {
       setLoading(false);
     }

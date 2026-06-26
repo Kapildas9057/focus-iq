@@ -105,18 +105,8 @@ export default function StudentDashboard({
     }, 1200);
   };
 
-  // Safe tab click handler that locks other screens if NFC hasn't been scanned
+  // Safe tab click handler
   const handleTabClick = (tab: 'focus' | 'shield' | 'leaderboard' | 'metrics') => {
-    if (tab === 'focus') {
-      setActiveTab('focus');
-      return;
-    }
-    
-    if (!isActiveSession) {
-      setNfcAlertMsg('🔒 Please scan the NFC study sticker first to activate your Focus block and unlock all companion pages!');
-      return;
-    }
-    
     setActiveTab(tab);
   };
 
