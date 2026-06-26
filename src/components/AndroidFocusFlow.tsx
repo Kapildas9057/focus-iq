@@ -10,6 +10,7 @@ import {
   HelpCircle, AlertTriangle, Play, Pause, Square, ChevronRight, Trophy, ShieldAlert
 } from 'lucide-react';
 import { audioSynth } from '../utils/audio';
+import { startMotionMonitoring, stopMotionMonitoring, isMotionSupported, requestMotionPermission } from '../utils/motionDetector';
 
 interface PyqQuestion {
   id: number;
@@ -97,6 +98,7 @@ interface AndroidFocusFlowProps {
   onStrikeLogged: (totalStrikes: number) => void;
   isActiveSession: boolean;
   setIsActiveSession: (active: boolean) => void;
+  onMotionStrike: () => void;
 }
 
 export default function AndroidFocusFlow({
@@ -105,7 +107,8 @@ export default function AndroidFocusFlow({
   onSessionInterrupted,
   onStrikeLogged,
   isActiveSession,
-  setIsActiveSession
+  setIsActiveSession,
+  onMotionStrike
 }: AndroidFocusFlowProps) {
   
   // Steps: 'goal' -> 'breathing' -> 'clock' -> 'countdown' -> 'quiz' -> 'summary'
@@ -172,12 +175,21 @@ export default function AndroidFocusFlow({
   const [earnedPoints, setEarnedPoints] = useState(0);
   const [correctAnswersCount, setCorrectAnswersCount] = useState(0);
 
+  // Request motion permission on mount (needed for iOS 13+)
+  const [motionPermissionGranted, setMotionPermissionGranted] = useState(false);
+  
   useEffect(() => {
+    if (isMotionSupported()) {
+      requestMotionPermission().then(granted => {
+        setMotionPermissionGranted(granted);
+      });
+    }
     return () => {
       stopBreathing();
       stopTimer();
       stopWarningTimer();
       stopQuizTimer();
+      stopMotionMonitoring();
     };
   }, []);
 
@@ -189,7 +201,7 @@ export default function AndroidFocusFlow({
 
   // Stop session entirely and go back to initial goal screen when no longer active
   useEffect(() => {
-    if (!isActiveSession && currentStep !== 'goal' && currentStep !== 'summary') {
+    if (!isActiveSession && !['goal', 'clock', 'breathing', 'summary'].includes(currentStep)) {
       setCurrentStep('goal');
     }
   }, [isActiveSession, currentStep]);
@@ -316,22 +328,48 @@ export default function AndroidFocusFlow({
     setStrikes(0);
     audioSynth.playStart();
 
-    timerRef.current = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          timerRef.current = null;
-          // Defer state updates to avoid React updater side-effects
-          setTimeout(() => triggerQuizState(), 0);
-          return 0;
-        }
-        return prev - 1;
+    // Start real accelerometer monitoring for phone lift/tilt detection
+    if (isMotionSupported() && motionPermissionGranted) {
+      startMotionMonitoring(() => {
+        // This callback fires when phone is lifted/tilted
+        triggerTiltWarning();
+        onMotionStrike();
       });
-    }, 1000);
+    }
+
   };
+
+  useEffect(() => {
+    if (isRunning && !isWarningActive) {
+      timerRef.current = setInterval(() => {
+        setSecondsLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current!);
+            timerRef.current = null;
+            stopMotionMonitoring();
+            setTimeout(() => triggerQuizState(), 0);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isRunning, isWarningActive]);
 
   const stopTimer = () => {
     setIsRunning(false);
+    stopMotionMonitoring();
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -709,7 +747,7 @@ export default function AndroidFocusFlow({
                   onPointerMove={handleDialPointerMove}
                   onPointerUp={handleDialPointerUp}
                   onPointerLeave={handleDialPointerUp}
-                  className="w-40 h-40 select-none cursor-crosshair transform overflow-visible"
+                  className="w-40 h-40 select-none cursor-crosshair transform overflow-visible touch-none"
                 >
                   <circle cx="80" cy="80" r="75" className="stroke-stone-200 fill-white" strokeWidth="2" />
                   <circle cx="80" cy="80" r="68" className="stroke-stone-100 fill-none" strokeWidth="1" strokeDasharray="3, 3" />
@@ -780,7 +818,7 @@ export default function AndroidFocusFlow({
                   <button
                     key={preset}
                     onClick={() => setDialDuration(preset)}
-                    className={`px-3 py-1 rounded-lg text-4xs font-mono font-bold border transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs font-mono font-bold border transition-all ${
                       dialDuration === preset
                         ? 'bg-stone-900 border-stone-900 text-white'
                         : 'bg-white border-stone-200 text-stone-500 hover:text-stone-800 hover:border-stone-300'

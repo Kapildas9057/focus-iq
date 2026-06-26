@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldCheck, RefreshCw, Key, Clock, Ban, Trophy, 
-  User, AlertCircle, Flame
+  User, AlertCircle, Flame, LogOut
 } from 'lucide-react';
 import { UserProfile, FocusSession, DistractionAttempt } from '../types';
 
@@ -19,6 +19,7 @@ interface ParentDashboardProps {
   pairingCode: string | null;
   onGenerateCode: () => void;
   codeExpirySeconds: number;
+  onSignOut: () => void;
 }
 
 export default function ParentDashboard({
@@ -28,7 +29,8 @@ export default function ParentDashboard({
   distractionAttempts,
   pairingCode,
   onGenerateCode,
-  codeExpirySeconds
+  codeExpirySeconds,
+  onSignOut
 }: ParentDashboardProps) {
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'sessions' | 'distractions'>('overview');
 
@@ -46,9 +48,30 @@ export default function ParentDashboard({
   const totalStrikesCount = focusHistory.reduce((sum, s) => sum + s.strikes, 0);
   const totalDistractionsCount = distractionAttempts.length;
 
+  // Calculate real daily hours from actual session data
   const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const dailyHours = [1.5, 2.0, 0.8, 3.5, 0.0, 1.2, parseFloat(totalFocusedHours) || 0.0];
-  const maxHours = Math.max(...dailyHours, 4.0);
+  const now = new Date();
+  const currentDayIndex = (now.getDay() + 6) % 7; // Convert Sun=0 to Mon=0 format
+  
+  const dailyHours = daysOfWeek.map((_, dayIdx) => {
+    // Calculate the date for this day of the current week
+    const dayDiff = dayIdx - currentDayIndex;
+    const targetDate = new Date(now);
+    targetDate.setDate(now.getDate() + dayDiff);
+    const targetDateStr = targetDate.toDateString();
+    
+    // Sum completed session minutes for this day
+    const dayMinutes = focusHistory
+      .filter(s => {
+        const sessionDate = new Date(s.createdAt).toDateString();
+        return s.status === 'completed' && sessionDate === targetDateStr;
+      })
+      .reduce((sum, s) => sum + s.durationMinutes, 0);
+    
+    return parseFloat((dayMinutes / 60).toFixed(1));
+  });
+  
+  const maxHours = Math.max(...dailyHours, 1.0); // Minimum 1h scale
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto text-left text-stone-800">
@@ -61,14 +84,14 @@ export default function ParentDashboard({
               <User className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-[10px] font-mono text-stone-400 uppercase tracking-wider font-bold">Linked Account</div>
+              <div className="text-[10px] font-mono text-stone-400 uppercase tracking-wider font-bold">Parent Account</div>
               <h1 className="text-lg font-display font-black text-stone-900 uppercase tracking-tight">
-                {parentProfile ? `Parent View • ${parentProfile.username}` : 'Parent Dashboard'}
+                {parentProfile ? parentProfile.username : 'Parent Dashboard'}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             {studentProfile ? (
               <div className="flex items-center gap-1.5 bg-stone-100 text-stone-800 border border-stone-200 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase">
                 <ShieldCheck className="w-4 h-4 text-stone-800" />
@@ -80,6 +103,13 @@ export default function ParentDashboard({
                 No Student Linked
               </div>
             )}
+            <button
+              onClick={onSignOut}
+              className="flex items-center gap-1 bg-white border border-stone-200 text-stone-500 hover:text-red-600 hover:border-red-200 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase transition-all cursor-pointer"
+            >
+              <LogOut className="w-3 h-3" />
+              Sign Out
+            </button>
           </div>
         </div>
       </div>
@@ -92,9 +122,9 @@ export default function ParentDashboard({
               <Key className="w-6 h-6 text-stone-850" />
             </div>
             <div>
-              <h2 className="text-xl font-display font-black text-stone-900 uppercase">Synchronize Student App</h2>
+              <h2 className="text-xl font-display font-black text-stone-900 uppercase">Link Student Device</h2>
               <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                Enter this sync code in the student device FocusLoop settings to monitor progress and block limits in real-time.
+                Generate a sync code and enter it on the student's FocusLoop app to monitor their focus data in real-time.
               </p>
             </div>
 
@@ -135,21 +165,21 @@ export default function ParentDashboard({
                   <span className="w-5 h-5 rounded-full bg-stone-100 text-stone-700 font-mono text-[10px] font-bold flex items-center justify-center border border-stone-200">1</span>
                   Generate Code
                 </div>
-                <p className="text-[10px] leading-relaxed pl-6">Click code button above to generate a sync key.</p>
+                <p className="text-[10px] leading-relaxed pl-6">Tap button above to generate a sync key.</p>
               </div>
               <div className="space-y-1">
                 <div className="text-xs font-bold text-stone-800 font-display flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-stone-100 text-stone-700 font-mono text-[10px] font-bold flex items-center justify-center border border-stone-200">2</span>
-                  Student Inputs Code
+                  Student Enters Code
                 </div>
-                <p className="text-[10px] leading-relaxed pl-6">Open FocusLoop on student device and enter sync code.</p>
+                <p className="text-[10px] leading-relaxed pl-6">Open FocusLoop on student device → Me tab → enter sync code.</p>
               </div>
               <div className="space-y-1">
                 <div className="text-xs font-bold text-stone-800 font-display flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-stone-100 text-stone-700 font-mono text-[10px] font-bold flex items-center justify-center border border-stone-200">3</span>
-                  Enjoy Dashboard
+                  Monitor Progress
                 </div>
-                <p className="text-[10px] leading-relaxed pl-6">Review weekly charts and focus session logs instantly.</p>
+                <p className="text-[10px] leading-relaxed pl-6">View focus hours, streaks, and blocked apps in real-time.</p>
               </div>
             </div>
           </div>
@@ -217,7 +247,7 @@ export default function ParentDashboard({
                         {totalFocusedHours}h
                       </div>
                       <div className="text-[10px] text-stone-500 leading-none mt-1">
-                        Completed blocks this week
+                        Total completed blocks
                       </div>
                     </div>
                   </div>
@@ -272,16 +302,17 @@ export default function ParentDashboard({
 
                 </div>
 
-                {/* SVG Visual Bar Chart */}
+                {/* SVG Visual Bar Chart — Real Data */}
                 <div className="bg-white border border-stone-200 rounded-3xl p-5 shadow-2xs">
                   <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-stone-500 mb-4 text-left">
-                    Daily Focus Profile (Hours)
+                    This Week's Focus (Hours)
                   </h3>
 
                   <div className="flex items-end justify-between h-36 pt-4 px-2 max-w-lg mx-auto">
                     {daysOfWeek.map((day, idx) => {
                       const value = dailyHours[idx];
-                      const pct = (value / maxHours) * 100;
+                      const pct = maxHours > 0 ? (value / maxHours) * 100 : 0;
+                      const isToday = idx === currentDayIndex;
                       return (
                         <div key={day} className="flex flex-col items-center flex-1">
                           <div className="text-[9px] font-mono text-stone-500 mb-1">{value.toFixed(1)}h</div>
@@ -290,23 +321,29 @@ export default function ParentDashboard({
                               initial={{ height: 0 }}
                               animate={{ height: `${pct}%` }}
                               transition={{ delay: idx * 0.04, duration: 0.5 }}
-                              className="w-full rounded-t-sm bg-stone-900"
+                              className={`w-full rounded-t-sm ${isToday ? 'bg-stone-900' : 'bg-stone-400'}`}
                             />
                           </div>
-                          <span className="text-[9px] font-bold text-stone-400 mt-2 font-mono">{day}</span>
+                          <span className={`text-[9px] font-bold mt-2 font-mono ${isToday ? 'text-stone-900' : 'text-stone-400'}`}>{day}</span>
                         </div>
                       );
                     })}
                   </div>
+
+                  {focusHistory.length === 0 && (
+                    <div className="text-center text-[10px] text-stone-400 mt-3 font-mono">
+                      No session data yet. Chart will populate as your student studies.
+                    </div>
+                  )}
                 </div>
 
                 {/* Policy Notice Card */}
                 <div className="bg-white border border-stone-200 rounded-2xl p-4 text-left space-y-1">
                   <div className="text-xs font-bold text-stone-900 font-display uppercase tracking-wider">
-                    ⚖️ Strict Zero-Interference Policy
+                    ⚖️ Zero-Interference Policy
                   </div>
                   <p className="text-[10px] text-stone-500 leading-relaxed">
-                    This companion platform enforces zero interference. Parents can review statistics and log details, but cannot manipulate active sessions, streaking metrics, or point systems. This ensures healthy accountability and builds lasting trust.
+                    Parents can review statistics and logs, but cannot manipulate active sessions, streaking metrics, or point systems. This ensures healthy accountability and builds lasting trust.
                   </p>
                 </div>
 
@@ -322,12 +359,12 @@ export default function ParentDashboard({
                 className="bg-white border border-stone-200 rounded-3xl p-5 shadow-2xs"
               >
                 <h3 className="text-xs font-mono font-bold text-stone-500 mb-4 uppercase">
-                  Historical Study Blocks
+                  Study Session History
                 </h3>
 
                 {focusHistory.length === 0 ? (
                   <div className="text-center py-8 text-stone-400 text-xs">
-                    No focus blocks logged yet.
+                    No focus sessions recorded yet.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -359,7 +396,7 @@ export default function ParentDashboard({
                             {session.status === 'completed' ? `+${session.pointsEarned} PTS` : '0 PTS'}
                           </div>
                           <div className="text-[9px] text-stone-400 font-mono">
-                            {session.strikes} warning strikes
+                            {session.strikes} strikes
                           </div>
                         </div>
                       </div>
@@ -378,12 +415,12 @@ export default function ParentDashboard({
                 className="bg-white border border-stone-200 rounded-3xl p-5 shadow-2xs"
               >
                 <h3 className="text-xs font-mono font-bold text-stone-500 mb-4 uppercase">
-                  Shielded Application Interruptions
+                  Blocked App Attempts
                 </h3>
 
                 {distractionAttempts.length === 0 ? (
                   <div className="text-center py-8 text-stone-400 text-xs">
-                    Amazing! Zero distractions logged during study time.
+                    No distractions logged yet.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -398,7 +435,7 @@ export default function ParentDashboard({
                           </div>
                           <div className="text-left">
                             <div className="text-xs font-bold text-stone-800">
-                              Blocked app: {attempt.appName}
+                              Blocked: {attempt.appName}
                             </div>
                             <div className="text-[9px] font-mono text-stone-400">
                               {new Date(attempt.timestamp).toLocaleTimeString()} • {new Date(attempt.timestamp).toLocaleDateString()}
@@ -407,7 +444,7 @@ export default function ParentDashboard({
                         </div>
 
                         <span className="text-[8px] font-mono bg-stone-100 text-stone-700 border border-stone-200 px-1.5 py-0.5 rounded font-bold uppercase">
-                          Redirect Shielded
+                          Blocked
                         </span>
                       </div>
                     ))}

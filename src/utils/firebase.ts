@@ -8,11 +8,13 @@ import {
   getFirestore, doc, getDocFromServer, collection, 
   setDoc, getDoc, getDocs, updateDoc, addDoc, query, where, orderBy, limit, deleteDoc
 } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const auth = getAuth(app);
 
 // Test Connection on startup as required by Firestore integration skill
 async function testConnection() {
@@ -31,7 +33,7 @@ async function testConnection() {
 
 testConnection();
 
-export { db };
+export { db, auth };
 
 // Firebase synchronization helpers for FocusLoop
 export async function syncUserProfile(uid: string, profile: any) {

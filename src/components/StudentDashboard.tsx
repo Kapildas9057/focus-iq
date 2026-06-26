@@ -6,7 +6,7 @@
 import React, { useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Trophy, Flame, Smartphone, CheckCircle, AlertTriangle, Zap, Shield, Activity, Lock
+  Trophy, Flame, CheckCircle, AlertTriangle, Zap, Shield, Activity, LogOut, User
 } from 'lucide-react';
 import { UserProfile, FocusSession, BlockedApp, LeaderboardEntry } from '../types';
 import AndroidFocusFlow from './AndroidFocusFlow';
@@ -28,11 +28,13 @@ interface StudentDashboardProps {
   isPairingLocked: boolean;
   lockoutRemainingTime: string;
 
-  // Android Navigation integration
+  // App management
   blockedApps: BlockedApp[];
   setBlockedApps: (apps: BlockedApp[]) => void;
   leaderboard: LeaderboardEntry[];
   onDistractionAttempt: (appName: string) => void;
+  onMotionStrike: () => void;
+  onSignOut: () => void;
 }
 
 export default function StudentDashboard({
@@ -50,20 +52,17 @@ export default function StudentDashboard({
   blockedApps,
   setBlockedApps,
   leaderboard,
-  onDistractionAttempt
+  onDistractionAttempt,
+  onMotionStrike,
+  onSignOut
 }: StudentDashboardProps) {
   
-  // Navigation active tab: 'focus' | 'shield' | 'leaderboard' | 'metrics'
+  // Navigation: all tabs always accessible (no NFC gating)
   const [activeTab, setActiveTab] = useState<'focus' | 'shield' | 'leaderboard' | 'metrics'>('focus');
 
   const [codeInputValue, setCodeInputValue] = useState('');
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [pairingSuccess, setPairingSuccess] = useState(false);
-  const [nfcAlertMsg, setNfcAlertMsg] = useState<string | null>(null);
-  
-  // NFC simulation
-  const [nfcScanning, setNfcScanning] = useState(false);
-  const [nfcStatus, setNfcStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
 
   // Handle pairing form submission
   const handlePairingSubmit = async (e: FormEvent) => {
@@ -87,28 +86,6 @@ export default function StudentDashboard({
     }
   };
 
-  // Simulate NFC sticker scan
-  const triggerNfcScan = () => {
-    if (isActiveSession) return;
-    setNfcScanning(true);
-    setNfcStatus('scanning');
-    
-    setTimeout(() => {
-      setNfcScanning(false);
-      setNfcStatus('success');
-      
-      setTimeout(() => setNfcStatus('idle'), 2500);
-      
-      setNfcAlertMsg('NFC Sticker detected! Focus countdown timer window opened.');
-      setIsActiveSession(true);
-      setActiveTab('focus');
-    }, 1200);
-  };
-
-  // Safe tab click handler
-  const handleTabClick = (tab: 'focus' | 'shield' | 'leaderboard' | 'metrics') => {
-    setActiveTab(tab);
-  };
 
   // Aggregated student stats
   const todayMinutes = focusHistory
@@ -122,7 +99,7 @@ export default function StudentDashboard({
   const dailyGoalPercent = Math.min(100, (todayMinutes / studentProfile.dailyGoalMinutes) * 100);
 
   return (
-    <div className="flex flex-col bg-white overflow-hidden w-full h-full relative xl:border xl:border-stone-250/80 xl:rounded-[40px] xl:shadow-lg xl:min-h-[670px] xl:max-h-[710px]">
+    <div className="flex flex-col bg-white overflow-hidden w-full h-full relative">
       
       {/* 1. Top App Bar */}
       <div className="bg-[#FAF8F5] border-b border-stone-200/80 px-5 py-3 flex justify-between items-center z-15 shrink-0">
@@ -144,252 +121,173 @@ export default function StudentDashboard({
         </div>
       </div>
 
-      {/* 2. Notification/NFC Banner Alerts */}
-      <AnimatePresence>
-        {nfcAlertMsg && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex justify-between items-start gap-4 text-stone-700 font-sans text-[10px] leading-relaxed z-15 shrink-0"
-          >
-            <div>
-              <span className="font-bold text-stone-900">NFC:</span> {nfcAlertMsg}
-            </div>
-            <button 
-              onClick={() => setNfcAlertMsg(null)}
-              className="px-1.5 py-0.5 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded text-[9px] font-bold cursor-pointer"
-            >
-              OK
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 3. Main Viewport Container */}
+      {/* 2. Main Viewport Container */}
       <div className="flex-1 overflow-y-auto p-4 pb-20 scrollbar-none bg-white relative flex flex-col">
-        <AnimatePresence mode="wait">
+        <div>
           
-          {/* SCREEN 1: FOCUS FLOW */}
-          {activeTab === 'focus' && !isActiveSession && (
-            <motion.div
-              key="nfc-scan-screen"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="flex flex-col items-center justify-center text-center py-5 px-3 space-y-4 min-h-[460px] h-full select-none"
-            >
-              <div className="space-y-0.5">
-                <span className="text-[9px] font-mono tracking-widest text-stone-400 uppercase font-black block">FocusLoop NFC Protocol</span>
-                <h3 className="text-sm font-display font-black text-stone-900 tracking-tight uppercase">Ready to Scan</h3>
-              </div>
-
-              {/* NFC Contactless Scanning Pulse Animation */}
-              <div className="relative w-36 h-36 flex items-center justify-center">
-                {/* Concentric rotating/pulse rings */}
-                <div className="absolute w-32 h-32 border-2 border-dashed border-stone-200/80 rounded-full animate-spin [animation-duration:20s]" />
-                <motion.div 
-                  animate={{ scale: [1, 1.12, 1], opacity: [0.35, 0.7, 0.35] }}
-                  transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
-                  className="absolute w-24 h-24 bg-stone-50 border border-stone-150 rounded-full flex items-center justify-center"
-                />
-                <motion.div 
-                  animate={{ scale: [1, 1.25, 1], opacity: [0.12, 0.35, 0.12] }}
-                  transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut", delay: 0.4 }}
-                  className="absolute w-32 h-32 bg-stone-100/60 rounded-full"
-                />
-                <div className="relative z-10 w-14 h-14 rounded-2xl bg-stone-900 flex items-center justify-center shadow-md">
-                  <Smartphone className="w-7 h-7 text-white animate-bounce [animation-duration:2.5s]" />
-                </div>
-              </div>
-
-              <div className="space-y-1 max-w-[260px]">
-                <p className="text-xs font-bold text-stone-850">Tap Desk Sticker to Open Timer Window</p>
-                <p className="text-[10px] text-stone-500 leading-normal font-sans">
-                  Place your mobile phone on the physical NFC study tag. Tapping opens the focus session timer dial and locks background distracting apps.
-                </p>
-              </div>
-
-              <button
-                onClick={triggerNfcScan}
-                disabled={nfcScanning}
-                className={`w-full max-w-[210px] py-2.5 rounded-xl text-[10px] font-mono font-bold uppercase border tracking-wider transition-all cursor-pointer shadow-3xs ${
-                  nfcScanning
-                    ? 'bg-stone-100 border-stone-300 text-stone-500'
-                    : 'bg-stone-900 border-stone-900 text-white hover:bg-stone-800 active:scale-[0.98]'
-                }`}
-              >
-                {nfcScanning ? 'Calibrating Tag...' : '⚡ Simulate NFC Tap'}
-              </button>
-            </motion.div>
-          )}
-
-          {activeTab === 'focus' && isActiveSession && (
-            <motion.div
-              key="focus-active-screen"
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              className="space-y-3"
-            >
-              <AndroidFocusFlow
-                studentProfile={studentProfile}
-                onSessionComplete={onSessionComplete}
-                onSessionInterrupted={onSessionInterrupted}
-                onStrikeLogged={onStrikeLogged}
-                isActiveSession={isActiveSession}
-                setIsActiveSession={setIsActiveSession}
-              />
-            </motion.div>
-          )}
+          {/* SCREEN 1: FOCUS FLOW — directly show goal/timer (no NFC gate) */}
+          <div className={`space-y-3 ${activeTab === 'focus' ? 'block' : 'hidden'}`}>
+            <AndroidFocusFlow
+              studentProfile={studentProfile}
+              onSessionComplete={onSessionComplete}
+              onSessionInterrupted={onSessionInterrupted}
+              onStrikeLogged={onStrikeLogged}
+              isActiveSession={isActiveSession}
+              setIsActiveSession={setIsActiveSession}
+              onMotionStrike={onMotionStrike}
+            />
+          </div>
 
           {/* SCREEN 2: APP BLOCK SHIELD */}
-          {activeTab === 'shield' && (
-            <motion.div
-              key="shield-screen"
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              className="space-y-3"
-            >
-              <div className="text-center py-1">
-                <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-stone-400">Device Shields</h3>
-                <p className="text-sm font-bold text-stone-800">Distraction Prevention</p>
-              </div>
+          <div className={`space-y-3 ${activeTab === 'shield' ? 'block' : 'hidden'}`}>
+            <div className="text-center py-1">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-stone-400">Device Shields</h3>
+              <p className="text-sm font-bold text-stone-800">Distraction Prevention</p>
+            </div>
 
-              <AppBlocker
-                blockedApps={blockedApps}
-                setBlockedApps={setBlockedApps}
-                isSessionActive={isActiveSession}
-                onDistractionAttempt={onDistractionAttempt}
-              />
-            </motion.div>
-          )}
+            <AppBlocker
+              blockedApps={blockedApps}
+              setBlockedApps={setBlockedApps}
+              isSessionActive={isActiveSession}
+              onDistractionAttempt={onDistractionAttempt}
+            />
+          </div>
 
           {/* SCREEN 3: LEADERBOARD PEERS */}
-          {activeTab === 'leaderboard' && (
-            <motion.div
-              key="leaderboard-screen"
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              className="space-y-3"
-            >
-              <div className="text-center py-1">
-                <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-stone-400">Classmates</h3>
-                <p className="text-sm font-bold text-stone-800">State Leaderboard</p>
+          <div className={`space-y-3 ${activeTab === 'leaderboard' ? 'block' : 'hidden'}`}>
+            <div className="text-center py-1">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-stone-400">Classmates</h3>
+              <p className="text-sm font-bold text-stone-800">Focus Leaderboard</p>
+            </div>
+
+            <Leaderboard
+              entries={leaderboard}
+              currentUserUsername={studentProfile.username}
+            />
+          </div>
+
+          {/* SCREEN 4: METRICS & ACCOUNT */}
+          <div className={`space-y-4 text-left ${activeTab === 'metrics' ? 'block' : 'hidden'}`}>
+            <div className="text-center py-1">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-stone-400">Daily Analytics</h3>
+              <p className="text-sm font-bold text-stone-800">Focus Performance</p>
+            </div>
+
+            {/* Goal Progress Card */}
+            <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Daily Goal Progress</span>
+                <span className="text-[9px] font-mono text-stone-700 font-bold uppercase">
+                  {dailyGoalPercent.toFixed(0)}% Complete
+                </span>
               </div>
 
-              <Leaderboard
-                entries={leaderboard}
-                currentUserUsername={studentProfile.username}
-              />
-            </motion.div>
-          )}
-
-          {/* SCREEN 4: METRICS & CONSOLE STATS */}
-          {activeTab === 'metrics' && (
-            <motion.div
-              key="metrics-screen"
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              className="space-y-4 text-left"
-            >
-              <div className="text-center py-1">
-                <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-stone-400">Daily Analytics</h3>
-                <p className="text-sm font-bold text-stone-800">Focus Performance</p>
+              <div className="flex justify-between text-xs text-stone-600">
+                <span>Today's Focus:</span>
+                <span className="font-bold">{todayMinutes} / {studentProfile.dailyGoalMinutes} mins</span>
               </div>
 
-              {/* Goal Progress Card */}
-              <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-3 shadow-2xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Daily Goal Progress</span>
-                  <span className="text-[9px] font-mono text-stone-700 font-bold uppercase">
-                    {dailyGoalPercent.toFixed(0)}% Complete
-                  </span>
-                </div>
+              <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden border border-stone-200/50">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${dailyGoalPercent}%` }}
+                  className="h-full bg-stone-900 rounded-full"
+                />
+              </div>
+            </div>
 
-                <div className="flex justify-between text-xs text-stone-600">
-                  <span>Today's Focus:</span>
-                  <span className="font-bold">{todayMinutes} / {studentProfile.dailyGoalMinutes} mins</span>
+            {/* Account Info Card */}
+            <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+              <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Account</span>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-stone-900 text-white flex items-center justify-center">
+                  <User className="w-5 h-5" />
                 </div>
-
-                <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden border border-stone-200/50">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${dailyGoalPercent}%` }}
-                    className="h-full bg-stone-900 rounded-full"
-                  />
+                <div>
+                  <div className="text-sm font-bold text-stone-900">{studentProfile.username}</div>
+                  <div className="text-[10px] text-stone-500 font-mono">{studentProfile.email}</div>
                 </div>
               </div>
-
-              {/* Pairing code module */}
-              {!parentProfile && (
-                <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-2.5 shadow-2xs">
-                  <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Parent Dashboard Link</span>
-                  <p className="text-[11px] text-stone-500 leading-relaxed">
-                    Connect your statistics with your parent by entering their dashboard sync key.
-                  </p>
-
-                  <form onSubmit={handlePairingSubmit} className="flex gap-2">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={codeInputValue}
-                      onChange={(e) => setCodeInputValue(e.target.value.toUpperCase().trim())}
-                      placeholder="SYNC CODE"
-                      disabled={isPairingLocked}
-                      className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-mono font-bold tracking-widest text-center text-stone-800 focus:outline-none focus:border-stone-400 transition-all uppercase"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isPairingLocked}
-                      className="bg-stone-900 text-white font-bold px-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer hover:bg-stone-800"
-                    >
-                      Sync
-                    </button>
-                  </form>
-
-                  {pairingError && (
-                    <div className="text-[9px] text-red-600 font-semibold font-mono flex items-center gap-1 mt-1">
-                      <AlertTriangle className="w-3 h-3" /> {pairingError}
-                    </div>
-                  )}
+              {parentProfile && (
+                <div className="flex items-center gap-2 bg-stone-100 border border-stone-200 rounded-xl px-3 py-2">
+                  <CheckCircle className="w-3.5 h-3.5 text-stone-700" />
+                  <span className="text-[10px] font-mono font-bold text-stone-700">Linked to: {parentProfile.username}</span>
                 </div>
               )}
+              <button
+                onClick={onSignOut}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-stone-200 text-stone-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign Out
+              </button>
+            </div>
 
-              {/* Recent focus sessions log history */}
+            {/* Pairing code module */}
+            {!parentProfile && (
               <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-2.5 shadow-2xs">
-                <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Session History Log</span>
-                
-                <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1 no-scrollbar text-[10px] font-mono">
-                  {focusHistory.length === 0 ? (
-                    <div className="text-stone-400 text-center py-2">No focus sessions recorded yet.</div>
-                  ) : (
-                    [...focusHistory].reverse().slice(0, 3).map((session) => (
-                      <div key={session.id} className="flex justify-between items-center bg-white p-2 rounded-lg border border-stone-200/60">
-                        <span className="text-stone-600">{session.durationMinutes}m ({session.status})</span>
-                        <span className={session.status === 'completed' ? 'text-stone-800 font-bold' : 'text-red-600 font-bold'}>
-                          {session.status === 'completed' ? `+${session.pointsEarned} PTS` : `-${session.strikes * 15} PTS`}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
+                <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Parent Dashboard Link</span>
+                <p className="text-[11px] text-stone-500 leading-relaxed">
+                  Connect your statistics with your parent by entering their dashboard sync key.
+                </p>
 
-        </AnimatePresence>
+                <form onSubmit={handlePairingSubmit} className="flex gap-2">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={codeInputValue}
+                    onChange={(e) => setCodeInputValue(e.target.value.toUpperCase().trim())}
+                    placeholder="SYNC CODE"
+                    disabled={isPairingLocked}
+                    className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-mono font-bold tracking-widest text-center text-stone-800 focus:outline-none focus:border-stone-400 transition-all uppercase"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isPairingLocked}
+                    className="bg-stone-900 text-white font-bold px-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer hover:bg-stone-800"
+                  >
+                    Sync
+                  </button>
+                </form>
+
+                {pairingError && (
+                  <div className="text-[9px] text-red-600 font-semibold font-mono flex items-center gap-1 mt-1">
+                    <AlertTriangle className="w-3 h-3" /> {pairingError}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Recent focus sessions log history */}
+            <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-2.5 shadow-2xs">
+              <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Session History</span>
+              
+              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 no-scrollbar text-[10px] font-mono">
+                {focusHistory.length === 0 ? (
+                  <div className="text-stone-400 text-center py-2">No focus sessions recorded yet.</div>
+                ) : (
+                  [...focusHistory].reverse().slice(0, 5).map((session) => (
+                    <div key={session.id} className="flex justify-between items-center bg-white p-2 rounded-lg border border-stone-200/60">
+                      <span className="text-stone-600">{session.durationMinutes}m ({session.status})</span>
+                      <span className={session.status === 'completed' ? 'text-stone-800 font-bold' : 'text-red-600 font-bold'}>
+                        {session.status === 'completed' ? `+${session.pointsEarned} PTS` : `-${session.strikes * 15} PTS`}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      {/* 4. Bottom Tab Bar (Compact layout) */}
+      {/* 3. Bottom Tab Bar — All tabs always accessible */}
       <div className="absolute bottom-0 left-0 right-0 h-16 bg-[#FAF8F5]/95 border-t border-stone-200/80 backdrop-blur-md flex justify-around items-center z-20 px-3 pb-2 shrink-0">
         
         {/* Tab 1: Focus */}
         <button
-          onClick={() => handleTabClick('focus')}
+          onClick={() => setActiveTab('focus')}
           className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all cursor-pointer relative ${
             activeTab === 'focus' ? 'text-stone-900 font-bold' : 'text-stone-400 hover:text-stone-600'
           }`}
@@ -407,10 +305,10 @@ export default function StudentDashboard({
 
         {/* Tab 2: App Block Shield */}
         <button
-          onClick={() => handleTabClick('shield')}
+          onClick={() => setActiveTab('shield')}
           className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all cursor-pointer relative ${
             activeTab === 'shield' ? 'text-stone-900 font-bold' : 'text-stone-400 hover:text-stone-600'
-          } ${!isActiveSession ? 'opacity-40' : ''}`}
+          }`}
         >
           {activeTab === 'shield' && (
             <motion.div
@@ -419,16 +317,16 @@ export default function StudentDashboard({
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
             />
           )}
-          {!isActiveSession ? <Lock className="w-3.5 h-3.5 text-stone-500" /> : <Shield className="w-4 h-4" />}
+          <Shield className="w-4 h-4" />
           <span className="text-[8px] font-mono uppercase tracking-widest">Shield</span>
         </button>
 
         {/* Tab 3: Leaderboard */}
         <button
-          onClick={() => handleTabClick('leaderboard')}
+          onClick={() => setActiveTab('leaderboard')}
           className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all cursor-pointer relative ${
             activeTab === 'leaderboard' ? 'text-stone-900 font-bold' : 'text-stone-400 hover:text-stone-600'
-          } ${!isActiveSession ? 'opacity-40' : ''}`}
+          }`}
         >
           {activeTab === 'leaderboard' && (
             <motion.div
@@ -437,16 +335,16 @@ export default function StudentDashboard({
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
             />
           )}
-          {!isActiveSession ? <Lock className="w-3.5 h-3.5 text-stone-500" /> : <Trophy className="w-4 h-4" />}
+          <Trophy className="w-4 h-4" />
           <span className="text-[8px] font-mono uppercase tracking-widest">Peers</span>
         </button>
 
-        {/* Tab 4: Metrics/Stats */}
+        {/* Tab 4: Metrics/Account */}
         <button
-          onClick={() => handleTabClick('metrics')}
+          onClick={() => setActiveTab('metrics')}
           className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all cursor-pointer relative ${
             activeTab === 'metrics' ? 'text-stone-900 font-bold' : 'text-stone-400 hover:text-stone-600'
-          } ${!isActiveSession ? 'opacity-40' : ''}`}
+          }`}
         >
           {activeTab === 'metrics' && (
             <motion.div
@@ -455,8 +353,8 @@ export default function StudentDashboard({
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
             />
           )}
-          {!isActiveSession ? <Lock className="w-3.5 h-3.5 text-stone-500" /> : <Activity className="w-4 h-4" />}
-          <span className="text-[8px] font-mono uppercase tracking-widest">Metrics</span>
+          <Activity className="w-4 h-4" />
+          <span className="text-[8px] font-mono uppercase tracking-widest">Me</span>
         </button>
 
       </div>
