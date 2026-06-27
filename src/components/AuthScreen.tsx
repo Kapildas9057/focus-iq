@@ -156,11 +156,9 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         }
 
         // Send verification email (non-blocking)
-        try {
-          await sendEmailVerification(firebaseUser);
-        } catch (verifyErr: any) {
+        sendEmailVerification(firebaseUser).catch((verifyErr: any) => {
           console.warn('Could not send verification email:', verifyErr.message);
-        }
+        });
 
         // Save profile to Firestore
         const newUser: UserProfile = {

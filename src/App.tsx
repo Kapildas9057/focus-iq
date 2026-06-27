@@ -194,26 +194,28 @@ export default function App() {
           }
         }
 
-        // 3. Blocked apps from Firestore
-        const firebaseBlocked = await getBlockedAppsFirebase(studentProfile.uid);
+        // Parallelize independent data fetches
+        const [
+          firebaseBlocked,
+          firebaseHistory,
+          firebaseAttempts,
+          firebaseLeaders
+        ] = await Promise.all([
+          getBlockedAppsFirebase(studentProfile.uid),
+          getFocusHistoryFirebase(studentProfile.uid),
+          getDistractionAttemptsFirebase(studentProfile.uid),
+          getLeaderboardFirebase()
+        ]);
+
         if (firebaseBlocked && firebaseBlocked.length > 0) {
           setBlockedApps(firebaseBlocked);
         }
-
-        // 4. Focus sessions from Firestore
-        const firebaseHistory = await getFocusHistoryFirebase(studentProfile.uid);
         if (firebaseHistory && firebaseHistory.length > 0) {
           setFocusHistory(firebaseHistory);
         }
-
-        // 5. Distraction attempts
-        const firebaseAttempts = await getDistractionAttemptsFirebase(studentProfile.uid);
         if (firebaseAttempts && firebaseAttempts.length > 0) {
           setDistractionAttempts(firebaseAttempts);
         }
-
-        // 6. Leaderboard — real users only
-        const firebaseLeaders = await getLeaderboardFirebase();
         if (firebaseLeaders && firebaseLeaders.length > 0) {
           const merged: LeaderboardEntry[] = firebaseLeaders.map((u, idx) => ({
             uid: u.uid,
@@ -329,25 +331,31 @@ export default function App() {
       setStudentProfile(profile);
       localStorage.setItem('focusloop_student_profile', JSON.stringify(profile));
       
-      // Fetch associated details from Firestore
-      const firebaseBlocked = await getBlockedAppsFirebase(profile.uid);
+      // Fetch associated details from Firestore in parallel
+      const [
+        firebaseBlocked,
+        firebaseHistory,
+        firebaseAttempts,
+        storedParent
+      ] = await Promise.all([
+        getBlockedAppsFirebase(profile.uid),
+        getFocusHistoryFirebase(profile.uid),
+        getDistractionAttemptsFirebase(profile.uid),
+        profile.linkedParentId ? getUserProfile(profile.linkedParentId) : Promise.resolve(null)
+      ]);
+
       if (firebaseBlocked && firebaseBlocked.length > 0) {
         setBlockedApps(firebaseBlocked);
       }
-      const firebaseHistory = await getFocusHistoryFirebase(profile.uid);
       if (firebaseHistory && firebaseHistory.length > 0) {
         setFocusHistory(firebaseHistory);
       }
-      const firebaseAttempts = await getDistractionAttemptsFirebase(profile.uid);
       if (firebaseAttempts && firebaseAttempts.length > 0) {
         setDistractionAttempts(firebaseAttempts);
       }
       
-      if (profile.linkedParentId) {
-        const storedParent = await getUserProfile(profile.linkedParentId);
-        if (storedParent) {
-          setParentProfile(storedParent as UserProfile);
-        }
+      if (storedParent) {
+        setParentProfile(storedParent as UserProfile);
       } else {
         setParentProfile(null);
       }
@@ -360,15 +368,22 @@ export default function App() {
         if (storedStudent) {
           setStudentProfile(storedStudent as UserProfile);
           
-          const firebaseBlocked = await getBlockedAppsFirebase(profile.linkedStudentId);
+          const [
+            firebaseBlocked,
+            firebaseHistory,
+            firebaseAttempts
+          ] = await Promise.all([
+            getBlockedAppsFirebase(profile.linkedStudentId),
+            getFocusHistoryFirebase(profile.linkedStudentId),
+            getDistractionAttemptsFirebase(profile.linkedStudentId)
+          ]);
+          
           if (firebaseBlocked && firebaseBlocked.length > 0) {
             setBlockedApps(firebaseBlocked);
           }
-          const firebaseHistory = await getFocusHistoryFirebase(profile.linkedStudentId);
           if (firebaseHistory && firebaseHistory.length > 0) {
             setFocusHistory(firebaseHistory);
           }
-          const firebaseAttempts = await getDistractionAttemptsFirebase(profile.linkedStudentId);
           if (firebaseAttempts && firebaseAttempts.length > 0) {
             setDistractionAttempts(firebaseAttempts);
           }
