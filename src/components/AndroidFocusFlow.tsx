@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   CheckCircle, Target, Sparkles, Wind, Brain, Timer, Clock, 
-  HelpCircle, AlertTriangle, Play, Pause, Square, ChevronRight, Trophy, ShieldAlert
+  HelpCircle, AlertTriangle, Play, Coffee, Square, ChevronRight, Trophy, ShieldAlert
 } from 'lucide-react';
 import { audioSynth } from '../utils/audio';
 import { startMotionMonitoring, stopMotionMonitoring, isMotionSupported, requestMotionPermission } from '../utils/motionDetector';
@@ -208,35 +208,19 @@ export default function AndroidFocusFlow({
     }
   }, [isActiveSession, currentStep]);
 
-  // Page Visibility API — detect when user switches to another app during an active session
+  // Page Visibility API — pauses timer when user switches away (no strikes)
   useEffect(() => {
     if (currentStep !== 'countdown') return;
 
-    let visibilityTimer: NodeJS.Timeout | null = null;
-
     const handleVisibilityChange = () => {
-      if (document.hidden && isRunning && !isWarningActiveRef.current) {
-        // Small debounce: some browsers briefly hide the page on interactions
-        visibilityTimer = setTimeout(() => {
-          if (document.hidden && !isWarningActiveRef.current) {
-            triggerTiltWarning();
-            onMotionStrike();
-          }
-        }, 500);
-      } else {
-        // Page is visible again — cancel pending trigger
-        if (visibilityTimer) {
-          clearTimeout(visibilityTimer);
-          visibilityTimer = null;
-        }
-      }
+      // No longer giving strikes for leaving the app.
+      // The app blocking system handles distraction prevention instead.
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (visibilityTimer) clearTimeout(visibilityTimer);
     };
   }, [currentStep, isRunning]);
 
@@ -996,8 +980,8 @@ export default function AndroidFocusFlow({
                     onClick={() => setIsRunning(!isRunning)}
                     className="flex-1 bg-stone-900 hover:bg-stone-800 text-white font-bold py-2.5 rounded-xl text-2xs uppercase tracking-widest flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                   >
-                    {isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-                    {isRunning ? 'Pause' : 'Resume'}
+                    {isRunning ? <Coffee className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                    {isRunning ? 'Break' : 'Resume'}
                   </button>
                   <button
                     onClick={cancelFocus}

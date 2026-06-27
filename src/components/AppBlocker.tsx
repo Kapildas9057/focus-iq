@@ -249,7 +249,7 @@ export default function AppBlocker({
                         Screen Locked
                       </h3>
                       <p className="text-[10px] text-stone-500 leading-normal">
-                        <strong>{blockedAppName}</strong> is currently blocked by your parent\'s FocusLoop rules.
+                        <strong>{blockedAppName}</strong> is blocked during your focus session. Stay focused!
                       </p>
                     </div>
 

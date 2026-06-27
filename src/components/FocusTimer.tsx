@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Play, Pause, Square, AlertTriangle, CheckCircle2, 
+  Play, Coffee, Square, AlertTriangle, CheckCircle2, 
   XCircle, Smartphone, Zap, RotateCcw, Volume2, ShieldAlert
 } from 'lucide-react';
 import { audioSynth } from '../utils/audio';
@@ -238,8 +238,8 @@ export default function FocusTimer({
     initialOrientation.current = null;
   };
 
-  // Pause / Resume manually
-  const togglePause = () => {
+  // Break / Resume manually
+  const toggleBreak = () => {
     setIsRunning(!isRunning);
   };
 
@@ -409,11 +409,11 @@ export default function FocusTimer({
         ) : (
           <div className="flex gap-3 w-full">
             <button
-              onClick={togglePause}
+              onClick={toggleBreak}
               className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-200 font-medium py-3 px-4 rounded-full border border-slate-800 flex items-center justify-center gap-2 transition-all duration-200"
             >
-              {isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              {isRunning ? 'Pause' : 'Resume'}
+              {isRunning ? <Coffee className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+              {isRunning ? 'Break' : 'Resume'}
             </button>
             <button
               onClick={cancelSession}
