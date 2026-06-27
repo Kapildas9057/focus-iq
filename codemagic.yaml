@@ -1,0 +1,95 @@
+workflows:
+  ios-release:
+    name: FocusLoop iOS Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    
+    environment:
+      node: 20.17.0
+      xcode: latest
+      cocoapods: default
+      vars:
+        APP_STORE_CONNECT_ISSUER_ID: Encrypted(...)   # Add after setup
+        APP_STORE_CONNECT_KEY_IDENTIFIER: Encrypted(...)
+        APP_STORE_CONNECT_PRIVATE_KEY: Encrypted(...)
+        CERTIFICATE_PRIVATE_KEY: Encrypted(...)
+      groups:
+        - app_store_credentials  # optional credential group
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm ci
+
+      - name: Build web assets
+        script: |
+          npm run build
+
+      - name: Add iOS platform (if missing)
+        script: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+
+      - name: Sync Capacitor iOS
+        script: |
+          npx cap sync ios
+
+      - name: Install CocoaPods
+        script: |
+          cd ios/App
+          pod install --repo-update
+
+      - name: Build unsigned IPA (No Developer Account Needed)
+        script: |
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath $CM_BUILD_DIR/FocusLoop.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath $CM_BUILD_DIR/FocusLoop.xcarchive \
+            -exportPath $CM_BUILD_DIR/FocusLoop.ipa \
+            -exportOptionsPlist exportOptions.plist
+
+      - name: Create export options (ad-hoc / no signing)
+        script: |
+          cat > ios/App/exportOptions.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>development</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
+
+    artifacts:
+      - $CM_BUILD_DIR/**/*.ipa
+      - $CM_BUILD_DIR/**/*.xcarchive
+
+    publishing:
+      email:
+        recipients:
+          - you@email.com   # ← Change this to your email
+        notify:
+          success: true
+          failure: true

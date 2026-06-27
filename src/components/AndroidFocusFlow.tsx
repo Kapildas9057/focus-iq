@@ -161,6 +161,8 @@ export default function AndroidFocusFlow({
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isWarningActiveRef = useRef(false);
+  const secondsLeftRef = useRef(25 * 60);
 
   // --- STEP 5: QUIZ STATE ---
   const [dynamicQuestions, setDynamicQuestions] = useState<PyqQuestion[]>([]);
@@ -205,6 +207,38 @@ export default function AndroidFocusFlow({
       setCurrentStep('goal');
     }
   }, [isActiveSession, currentStep]);
+
+  // Page Visibility API — detect when user switches to another app during an active session
+  useEffect(() => {
+    if (currentStep !== 'countdown') return;
+
+    let visibilityTimer: NodeJS.Timeout | null = null;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRunning && !isWarningActiveRef.current) {
+        // Small debounce: some browsers briefly hide the page on interactions
+        visibilityTimer = setTimeout(() => {
+          if (document.hidden && !isWarningActiveRef.current) {
+            triggerTiltWarning();
+            onMotionStrike();
+          }
+        }, 500);
+      } else {
+        // Page is visible again — cancel pending trigger
+        if (visibilityTimer) {
+          clearTimeout(visibilityTimer);
+          visibilityTimer = null;
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (visibilityTimer) clearTimeout(visibilityTimer);
+    };
+  }, [currentStep, isRunning]);
 
   // ==========================================
   // --- BREATHING LOGIC ---
@@ -330,14 +364,24 @@ export default function AndroidFocusFlow({
 
     // Start real accelerometer monitoring for phone lift/tilt detection
     if (isMotionSupported() && motionPermissionGranted) {
-      startMotionMonitoring(() => {
-        // This callback fires when phone is lifted/tilted
-        triggerTiltWarning();
-        onMotionStrike();
-      });
+      startMotionMonitoring(
+        () => {
+          // Fired when phone is lifted/tilted
+          triggerTiltWarning();
+          onMotionStrike();
+        },
+        () => {
+          // Fired automatically when phone is placed flat again — auto-recover
+          recoverSession();
+        }
+      );
     }
 
   };
+
+  useEffect(() => {
+    secondsLeftRef.current = secondsLeft;
+  }, [secondsLeft]);
 
   useEffect(() => {
     if (isRunning && !isWarningActive) {
@@ -377,9 +421,11 @@ export default function AndroidFocusFlow({
   };
 
   const triggerTiltWarning = () => {
-    if (isWarningActive) return;
+    if (isWarningActiveRef.current) return;
+    isWarningActiveRef.current = true;
     setIsWarningActive(true);
     setWarningSecondsLeft(5);
+    // Play warning sound ONCE when the lift is first detected
     audioSynth.playWarning();
 
     warningTimerRef.current = setInterval(() => {
@@ -392,30 +438,31 @@ export default function AndroidFocusFlow({
         }
         return prev - 1;
       });
-      // Play warning sound independently of the state update
-      audioSynth.playWarning();
     }, 1000);
   };
 
   const handleStrikeLogged = () => {
     stopWarningTimer();
-    const nextStrikes = strikes + 1;
-    setStrikes(nextStrikes);
-    onStrikeLogged(nextStrikes);
+    setStrikes(prev => {
+      const nextStrikes = prev + 1;
+      onStrikeLogged(nextStrikes);
 
-    if (nextStrikes >= 3) {
-      audioSynth.playInterrupted();
-      onSessionInterrupted(dialDuration * 60 - secondsLeft, strikes);
-      setIsActiveSession(false);
-      setIsRunning(false);
-      setCurrentStep('goal');
-    } else {
-      audioSynth.playInterrupted();
-      setIsWarningActive(false);
-    }
+      if (nextStrikes >= 3) {
+        audioSynth.playInterrupted();
+        stopMotionMonitoring();
+        onSessionInterrupted(dialDuration * 60 - secondsLeftRef.current, nextStrikes);
+        setIsActiveSession(false);
+        setIsRunning(false);
+        setCurrentStep('goal');
+      } else {
+        audioSynth.playInterrupted();
+      }
+      return nextStrikes;
+    });
   };
 
   const stopWarningTimer = () => {
+    isWarningActiveRef.current = false;
     setIsWarningActive(false);
     if (warningTimerRef.current) {
       clearInterval(warningTimerRef.current);

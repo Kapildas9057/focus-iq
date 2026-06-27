@@ -29,6 +29,15 @@ import StudentDashboard from './components/StudentDashboard';
 import ParentDashboard from './components/ParentDashboard';
 import AuthScreen from './components/AuthScreen';
 
+// Clear all locally stored focusloop data once on app load (fresh state — Firebase is source of truth)
+const FOCUSLOOP_KEYS = [
+  'focusloop_focus_history',
+  'focusloop_distraction_attempts',
+  'focusloop_blocked_apps',
+  'focusloop_leaderboard',
+];
+FOCUSLOOP_KEYS.forEach((key) => localStorage.removeItem(key));
+
 export default function App() {
   // --- Authentication State ---
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {

@@ -6,7 +6,12 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     hostname: 'gen-lang-client-0554819453.firebaseapp.com',
-    androidScheme: 'https'
+    androidScheme: 'https',
+    iosScheme: 'https'
+  },
+  ios: {
+    contentInset: 'automatic',
+    allowsLinkPreview: false
   }
 };
 
