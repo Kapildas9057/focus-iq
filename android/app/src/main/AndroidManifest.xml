@@ -22,6 +22,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- NFC: receive any tag while this activity is in the foreground -->
+            <intent-filter>
+                <action android:name="android.nfc.action.TAG_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -36,6 +42,15 @@
     </application>
 
     <!-- Permissions -->
-
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- NFC: read tags -->
+    <uses-permission android:name="android.permission.NFC" />
+
+    <!-- DND: read/write Do Not Disturb policy -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
+    <!-- NFC hardware: required=false so app still installs on non-NFC devices -->
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
 </manifest>

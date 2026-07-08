@@ -29,14 +29,7 @@ import StudentDashboard from './components/StudentDashboard';
 import ParentDashboard from './components/ParentDashboard';
 import AuthScreen from './components/AuthScreen';
 
-// Clear all locally stored focusloop data once on app load (fresh state — Firebase is source of truth)
-const FOCUSLOOP_KEYS = [
-  'focusloop_focus_history',
-  'focusloop_distraction_attempts',
-  'focusloop_blocked_apps',
-  'focusloop_leaderboard',
-];
-FOCUSLOOP_KEYS.forEach((key) => localStorage.removeItem(key));
+
 
 export default function App() {
   // --- Authentication State ---
@@ -80,15 +73,15 @@ export default function App() {
   const [studentProfile, setStudentProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('focusloop_student_profile');
     if (saved) return JSON.parse(saved);
-    // Clean default — no fake data
+    // Mock data for realistic screenshot
     return {
-      uid: '',
-      email: '',
+      uid: 'mock-user-123',
+      email: 'creator@focusloop.app',
       role: 'student',
-      username: '',
-      points: 0,
-      streak: 0,
-      dailyGoalMinutes: 45,
+      username: 'FocusLoopCreator',
+      points: 10850,
+      streak: 14,
+      dailyGoalMinutes: 120,
     };
   });
 
@@ -100,7 +93,23 @@ export default function App() {
   const [focusHistory, setFocusHistory] = useState<FocusSession[]>(() => {
     const saved = localStorage.getItem('focusloop_focus_history');
     if (saved) return JSON.parse(saved);
-    return []; // Start empty — no seed sessions
+    const mockSessions: FocusSession[] = [];
+    // Dates from June 25, 2026 to July 8, 2026 (14 days)
+    const startDate = new Date('2026-06-25T10:00:00Z');
+    const durations = [35, 45, 40, 60, 55, 75, 80, 85, 95, 100, 105, 115, 120, 130];
+    durations.forEach((d, i) => {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      mockSessions.push({
+        id: `mock-session-${i}`,
+        durationMinutes: d,
+        strikes: 0,
+        pointsEarned: d * 10,
+        status: 'completed',
+        createdAt: date.toISOString()
+      });
+    });
+    return mockSessions;
   });
 
   const [distractionAttempts, setDistractionAttempts] = useState<DistractionAttempt[]>(() => {

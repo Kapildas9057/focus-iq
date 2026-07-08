@@ -112,7 +112,7 @@ export default function AndroidFocusFlow({
 }: AndroidFocusFlowProps) {
   
   // Steps: 'goal' -> 'breathing' -> 'clock' -> 'countdown' -> 'quiz' -> 'summary'
-  const [currentStep, setCurrentStep] = useState<'goal' | 'breathing' | 'clock' | 'countdown' | 'quiz' | 'summary'>('goal');
+  const [currentStep, setCurrentStep] = useState<'goal' | 'breathing' | 'clock' | 'countdown' | 'quiz' | 'summary'>('countdown');
 
   // --- STEP 1: GOAL STATE ---
   const [goalClass, setGoalClass] = useState('Class 12');
@@ -194,6 +194,13 @@ export default function AndroidFocusFlow({
       stopMotionMonitoring();
     };
   }, []);
+
+  // Auto-start timer when component mounts in countdown state
+  useEffect(() => {
+    if (isActiveSession && currentStep === 'countdown' && !isRunning) {
+      startFocusTimer();
+    }
+  }, [isActiveSession, currentStep]);
 
   useEffect(() => {
     if (currentStep === 'clock') {
@@ -375,7 +382,7 @@ export default function AndroidFocusFlow({
             clearInterval(timerRef.current!);
             timerRef.current = null;
             stopMotionMonitoring();
-            setTimeout(() => triggerQuizState(), 0);
+            setTimeout(() => finishSessionDirectly(), 0);
             return 0;
           }
           return prev - 1;
@@ -468,8 +475,17 @@ export default function AndroidFocusFlow({
   };
 
   // ==========================================
-  // --- RAPID FIRE MCQ QUIZ ---
+  // --- RAPID FIRE MCQ QUIZ (Bypassed) ---
   // ==========================================
+  const finishSessionDirectly = () => {
+    stopTimer();
+    stopWarningTimer();
+    audioSynth.playSuccess();
+    let baseFocusPoints = dialDuration * 10;
+    setEarnedPoints(baseFocusPoints);
+    onSessionComplete(dialDuration, strikes, baseFocusPoints);
+  };
+
   const triggerQuizState = () => {
     stopTimer();
     stopWarningTimer();
@@ -982,6 +998,13 @@ export default function AndroidFocusFlow({
                   >
                     {isRunning ? <Coffee className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
                     {isRunning ? 'Break' : 'Resume'}
+                  </button>
+                  <button
+                    onClick={() => finishSessionDirectly()}
+                    className="flex-1 bg-white border border-stone-200 text-stone-700 hover:text-stone-900 hover:bg-stone-50 font-bold py-2.5 rounded-xl text-2xs uppercase tracking-widest flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Finish
                   </button>
                   <button
                     onClick={cancelFocus}

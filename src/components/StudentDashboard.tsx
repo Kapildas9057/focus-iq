@@ -3,15 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Trophy, Flame, CheckCircle, AlertTriangle, Zap, Shield, Activity, LogOut, User
+  Trophy, Flame, CheckCircle, AlertTriangle, Zap, Shield, Activity, LogOut, User,
+  Nfc, BellOff, Wifi, WifiOff, Smartphone
 } from 'lucide-react';
 import { UserProfile, FocusSession, BlockedApp, LeaderboardEntry } from '../types';
+import { useNfcDnd } from '../utils/nfc-dnd-plugin';
 import AndroidFocusFlow from './AndroidFocusFlow';
 import AppBlocker from './AppBlocker';
 import Leaderboard from './Leaderboard';
+import BreathingTechnique from './BreathingTechnique';
+import PostStudyLog from './PostStudyLog';
 
 interface StudentDashboardProps {
   studentProfile: UserProfile;
@@ -57,8 +61,45 @@ export default function StudentDashboard({
   onSignOut
 }: StudentDashboardProps) {
   
+  // NFC + DND hook
+  const {
+    scanStatus,
+    lastTagUid,
+    nfcAvailable,
+    nfcEnabled,
+    errorMessage: nfcError,
+    dndPermissionGranted,
+    dndActive,
+    startScanning,
+    stopScanning,
+    checkDndPermission,
+    requestDndPermission,
+    enableDnd,
+    disableDnd,
+    resetTag,
+    simulateTagDetect,
+  } = useNfcDnd();
+
+  // Auto-enable DND when an NFC tag is detected
+  useEffect(() => {
+    if (scanStatus === 'detected' && lastTagUid) {
+      (async () => {
+        const granted = await checkDndPermission();
+        if (granted) {
+          await enableDnd('priority');
+        } else {
+          await requestDndPermission();
+        }
+        // Auto-start the focus flow!
+        setTimeout(() => setFocusPhase('breathing'), 800);
+      })();
+    }
+  }, [scanStatus, lastTagUid]);
+
   // Navigation: all tabs always accessible (no NFC gating)
   const [activeTab, setActiveTab] = useState<'focus' | 'shield' | 'leaderboard' | 'metrics'>('focus');
+  const [focusPhase, setFocusPhase] = useState<'scanning' | 'breathing' | 'studying' | 'logging'>('scanning');
+  const [pendingSessionData, setPendingSessionData] = useState<{ durationMinutes: number; strikes: number; pointsEarned: number } | null>(null);
 
   const [codeInputValue, setCodeInputValue] = useState('');
   const [pairingError, setPairingError] = useState<string | null>(null);
@@ -87,6 +128,21 @@ export default function StudentDashboard({
   };
 
 
+  const handleSessionComplete = (durationMinutes: number, strikes: number, pointsEarned: number) => {
+    setPendingSessionData({ durationMinutes, strikes, pointsEarned });
+    setIsActiveSession(false);
+    setFocusPhase('logging');
+  };
+
+  const handleLogComplete = (subject: string, notes: string) => {
+    if (pendingSessionData) {
+      onSessionComplete(pendingSessionData.durationMinutes, pendingSessionData.strikes, pendingSessionData.pointsEarned);
+    }
+    setPendingSessionData(null);
+    setFocusPhase('scanning');
+    resetTag();
+  };
+
   // Aggregated student stats
   const todayMinutes = focusHistory
     .filter(s => {
@@ -110,6 +166,17 @@ export default function StudentDashboard({
         
         {/* Profile Status Badges */}
         <div className="flex items-center gap-2">
+          {/* DND Active Indicator */}
+          {dndActive && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex items-center gap-1 bg-stone-900 text-white px-2 py-0.5 rounded-full text-[9px] font-mono font-bold"
+            >
+              <BellOff className="w-2.5 h-2.5" />
+              DND
+            </motion.div>
+          )}
           <div className="flex items-center gap-1 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-full text-[9px] font-mono text-stone-800 font-bold">
             <Trophy className="w-2.5 h-2.5 text-stone-700" />
             {studentProfile.points}
@@ -125,17 +192,188 @@ export default function StudentDashboard({
       <div className="flex-1 overflow-y-auto p-4 pb-20 scrollbar-none bg-white relative flex flex-col">
         <div>
           
-          {/* SCREEN 1: FOCUS FLOW — directly show goal/timer (no NFC gate) */}
+          {/* SCREEN 1: FOCUS FLOW — State Machine */}
           <div className={`space-y-3 ${activeTab === 'focus' ? 'block' : 'hidden'}`}>
-            <AndroidFocusFlow
-              studentProfile={studentProfile}
-              onSessionComplete={onSessionComplete}
-              onSessionInterrupted={onSessionInterrupted}
-              onStrikeLogged={onStrikeLogged}
-              isActiveSession={isActiveSession}
-              setIsActiveSession={setIsActiveSession}
-              onMotionStrike={onMotionStrike}
-            />
+
+            {focusPhase === 'scanning' && (
+              <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider font-bold">NFC Tag Scanner</span>
+                {nfcAvailable ? (
+                  <span className="text-[9px] font-mono text-stone-500 flex items-center gap-1">
+                    <Wifi className="w-2.5 h-2.5" /> NFC Ready
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-mono text-stone-400 flex items-center gap-1">
+                    <WifiOff className="w-2.5 h-2.5" /> Web Preview
+                  </span>
+                )}
+              </div>
+
+              {/* Scan Status Display */}
+              <AnimatePresence mode="wait">
+                {scanStatus === 'idle' || scanStatus === 'unavailable' ? (
+                  <motion.div
+                    key="idle"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center gap-2 py-3"
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center">
+                      <Nfc className="w-6 h-6 text-stone-400" />
+                    </div>
+                    <p className="text-[11px] text-stone-500 text-center">
+                      Tap your phone to an NFC tag to activate focus mode
+                    </p>
+                    {!nfcAvailable && (
+                      <button
+                        onClick={simulateTagDetect}
+                        className="mt-2 px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-[10px] font-bold border border-pink-200 active:scale-95 transition-transform"
+                      >
+                        Developer: Simulate Tap
+                      </button>
+                    )}
+                  </motion.div>
+                ) : scanStatus === 'scanning' ? (
+                  <motion.div
+                    key="scanning"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center gap-2 py-3"
+                  >
+                    <motion.div
+                      animate={{ scale: [1, 1.15, 1] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="w-12 h-12 rounded-2xl bg-stone-900 flex items-center justify-center"
+                    >
+                      <Nfc className="w-6 h-6 text-white" />
+                    </motion.div>
+                    <p className="text-[11px] text-stone-700 font-bold text-center">
+                      Scanning... Bring NFC tag close
+                    </p>
+                  </motion.div>
+                ) : scanStatus === 'detected' ? (
+                  <motion.div
+                    key="detected"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center gap-2 py-3"
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-green-100 border border-green-200 flex items-center justify-center">
+                      <CheckCircle className="w-6 h-6 text-green-700" />
+                    </div>
+                    <p className="text-[11px] text-green-800 font-bold text-center">Tag Detected!</p>
+                    <code className="text-[9px] font-mono bg-stone-100 border border-stone-200 px-2 py-1 rounded-lg text-stone-600">
+                      UID: {lastTagUid}
+                    </code>
+                    {dndActive && (
+                      <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-stone-700">
+                        <BellOff className="w-3 h-3" /> Do Not Disturb Activated
+                      </div>
+                    )}
+                  </motion.div>
+                ) : scanStatus === 'error' ? (
+                  <motion.div
+                    key="error"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center gap-2 py-3"
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center">
+                      <AlertTriangle className="w-6 h-6 text-red-500" />
+                    </div>
+                    <p className="text-[10px] text-red-600 font-mono text-center">{nfcError}</p>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                {scanStatus === 'idle' || scanStatus === 'error' || scanStatus === 'unavailable' ? (
+                  <button
+                    onClick={startScanning}
+                    disabled={!nfcAvailable}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-mono font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Nfc className="w-3.5 h-3.5" />
+                    Start Scan
+                  </button>
+                ) : scanStatus === 'scanning' ? (
+                  <button
+                    onClick={stopScanning}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-stone-300 text-stone-700 text-xs font-mono font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 transition-all"
+                  >
+                    Stop Scan
+                  </button>
+                ) : scanStatus === 'detected' ? (
+                  <>
+                    {dndActive && (
+                      <button
+                        onClick={disableDnd}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-stone-300 text-stone-700 text-xs font-mono font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-50 transition-all"
+                      >
+                        <BellOff className="w-3.5 h-3.5" />
+                        Disable DND
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { resetTag(); startScanning(); }}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-mono font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-800 transition-all"
+                    >
+                      Scan Again
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
+              {/* DND Permission Prompt */}
+              {nfcAvailable && !dndPermissionGranted && (
+                <button
+                  onClick={requestDndPermission}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-[10px] font-mono font-bold uppercase tracking-wider cursor-pointer hover:bg-amber-100 transition-all"
+                >
+                  <BellOff className="w-3 h-3" />
+                  Grant DND Permission
+                </button>
+              )}
+            </div>
+            )}
+
+            {focusPhase === 'breathing' && (
+              <BreathingTechnique 
+                onComplete={() => {
+                  setFocusPhase('studying');
+                  setIsActiveSession(true);
+                }} 
+              />
+            )}
+
+            {focusPhase === 'studying' && (
+              <AndroidFocusFlow
+                studentProfile={studentProfile}
+                onSessionComplete={handleSessionComplete}
+                onSessionInterrupted={(secs, strikes) => {
+                  onSessionInterrupted(secs, strikes);
+                  setFocusPhase('scanning');
+                  resetTag();
+                }}
+                onStrikeLogged={onStrikeLogged}
+                isActiveSession={isActiveSession}
+                setIsActiveSession={setIsActiveSession}
+                onMotionStrike={onMotionStrike}
+              />
+            )}
+
+            {focusPhase === 'logging' && pendingSessionData && (
+              <PostStudyLog 
+                pendingPoints={pendingSessionData.pointsEarned}
+                onLogComplete={handleLogComplete}
+              />
+            )}
           </div>
 
           {/* SCREEN 2: APP BLOCK SHIELD */}
