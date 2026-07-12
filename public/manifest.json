@@ -1,0 +1,9 @@
+{
+  "name": "FocusLoop",
+  "short_name": "FocusLoop",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F5",
+  "theme_color": "#FAF8F5",
+  "description": "FocusLoop — Premium study focus companion for students."
+}
