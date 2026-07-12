@@ -28,6 +28,7 @@ export default function AppBlocker({
   const [simulatedScreen, setSimulatedScreen] = useState<'home' | 'blocked'>('home');
   const [blockedAppName, setBlockedAppName] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  const [newAppName, setNewAppName] = useState('');
 
   // Toggle blocking state of an app
   const toggleBlockApp = (id: string) => {
@@ -38,6 +39,20 @@ export default function AppBlocker({
       return app;
     });
     setBlockedApps(updated);
+  };
+
+  const handleAddApp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAppName.trim()) return;
+    const newApp: BlockedApp = {
+      id: Date.now().toString(),
+      name: newAppName.trim(),
+      packageName: newAppName.trim().toLowerCase().replace(/\s+/g, '.') + '.app',
+      icon: 'Smartphone',
+      isBlocked: true
+    };
+    setBlockedApps([...blockedApps, newApp]);
+    setNewAppName('');
   };
 
   // Simulated clicking on an app inside the smartphone container
@@ -109,6 +124,23 @@ export default function AppBlocker({
               Define which applications are locked while your focus timer is active. 
               The application shielding service monitors activity to protect your block.
             </p>
+
+            <form onSubmit={handleAddApp} className="flex gap-2">
+              <input 
+                type="text" 
+                value={newAppName}
+                onChange={(e) => setNewAppName(e.target.value)}
+                placeholder="App name (e.g. Instagram)"
+                className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-800 font-medium focus:outline-none focus:border-stone-400 transition-all"
+              />
+              <button 
+                type="submit"
+                disabled={!newAppName.trim()}
+                className="bg-stone-900 text-white px-3 py-2 rounded-xl text-[10px] font-mono uppercase tracking-widest font-bold disabled:opacity-50 cursor-pointer"
+              >
+                Add
+              </button>
+            </form>
 
             <div className="space-y-2 max-h-[160px] overflow-y-auto scrollbar-none pr-0.5">
               {blockedApps.map((app) => (

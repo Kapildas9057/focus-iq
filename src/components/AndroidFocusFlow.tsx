@@ -12,84 +12,8 @@ import {
 import { audioSynth } from '../utils/audio';
 import { startMotionMonitoring, stopMotionMonitoring, isMotionSupported, requestMotionPermission } from '../utils/motionDetector';
 
-interface PyqQuestion {
-  id: number;
-  subject: string;
-  exam: string;
-  difficulty: 'Easy' | 'Medium' | 'Hard' | 'Extreme';
-  question: string;
-  options: string[];
-  correctIndex: number;
-  explanation: string;
-}
+import { PyqQuestion, getQuestionsByChapter, getQuestionsBySubject, GRADE_SUBJECT_CHAPTERS } from '../utils/questions';
 
-const GRADE_QUESTIONS: Record<string, Omit<PyqQuestion, 'id'>[]> = {
-  'Class 8': [
-    { subject: 'Math', exam: 'Boards', difficulty: 'Easy', question: 'What is the cube root of sixty-four?', options: ['A) 8', 'B) 4', 'C) 16', 'D) 2'], correctIndex: 1, explanation: '4 * 4 * 4 = 64' },
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Easy', question: 'What is the SI unit of pressure?', options: ['A) Newton', 'B) Joule', 'C) Pascal', 'D) Watt'], correctIndex: 2, explanation: 'Pressure is measured in Pascals (N/m²).' },
-    { subject: 'Biology', exam: 'Boards', difficulty: 'Medium', question: 'What acts as the control center of a cell?', options: ['A) Mitochondria', 'B) Nucleus', 'C) Ribosome', 'D) Cytoplasm'], correctIndex: 1, explanation: 'The nucleus contains genetic material and controls cell activities.' },
-    { subject: 'Chemistry', exam: 'Boards', difficulty: 'Hard', question: 'What is the chemical formula for ozone?', options: ['A) O2', 'B) O3', 'C) CO2', 'D) H2O'], correctIndex: 1, explanation: 'Ozone is composed of three oxygen atoms (O3).' },
-    { subject: 'Math', exam: 'Boards', difficulty: 'Hard', question: 'How many faces does a tetrahedron have?', options: ['A) 4', 'B) 6', 'C) 8', 'D) 12'], correctIndex: 0, explanation: 'A tetrahedron is a pyramid with a triangular base, having 4 faces in total.' }
-  ],
-  'Class 9': [
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Easy', question: 'What is the rate of change of velocity called?', options: ['A) Speed', 'B) Displacement', 'C) Acceleration', 'D) Momentum'], correctIndex: 2, explanation: 'Acceleration is defined as the rate of change of velocity with respect to time.' },
-    { subject: 'Math', exam: 'Boards', difficulty: 'Easy', question: 'What is the degree of a non-zero constant polynomial?', options: ['A) 0', 'B) 1', 'C) Undefined', 'D) 2'], correctIndex: 0, explanation: 'A constant polynomial (like 5) can be written as 5x^0, so its degree is 0.' },
-    { subject: 'Biology', exam: 'Boards', difficulty: 'Medium', question: 'Which plant tissue transports water?', options: ['A) Phloem', 'B) Xylem', 'C) Parenchyma', 'D) Collenchyma'], correctIndex: 1, explanation: 'Xylem transports water and minerals from roots to leaves.' },
-    { subject: 'Chemistry', exam: 'Boards', difficulty: 'Hard', question: 'What is the fourth state of matter?', options: ['A) Solid', 'B) Liquid', 'C) Gas', 'D) Plasma'], correctIndex: 3, explanation: 'Plasma is an ionized state of matter, making up the fourth state.' },
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Hard', question: 'What remains constant in uniform circular motion?', options: ['A) Velocity', 'B) Acceleration', 'C) Speed', 'D) Direction'], correctIndex: 2, explanation: 'In uniform circular motion, speed is constant while direction (and thus velocity) changes.' }
-  ],
-  'Class 10': [
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Easy', question: 'What is the SI unit of electric current?', options: ['A) Volt', 'B) Ohm', 'C) Ampere', 'D) Watt'], correctIndex: 2, explanation: 'Electric current is measured in Amperes (A).' },
-    { subject: 'Science', exam: 'Boards', difficulty: 'Easy', question: 'Which gas is produced when acid reacts with a metal?', options: ['A) Oxygen', 'B) Nitrogen', 'C) Carbon Dioxide', 'D) Hydrogen'], correctIndex: 3, explanation: 'Metals displace hydrogen from acids, releasing hydrogen gas.' },
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Medium', question: 'A 6 Ω and 3 Ω resistor are in parallel. What is the net resistance?', options: ['A) 9 Ω', 'B) 2 Ω', 'C) 18 Ω', 'D) 0.5 Ω'], correctIndex: 1, explanation: '(6*3)/(6+3) = 18/9 = 2 Ω' },
-    { subject: 'Chemistry', exam: 'Boards', difficulty: 'Medium', question: 'What is the pH of a neutral solution at 25 °C?', options: ['A) 0', 'B) 7', 'C) 14', 'D) 1'], correctIndex: 1, explanation: 'At standard temperature (25°C), a neutral solution has a pH of exactly 7.' },
-    { subject: 'Math', exam: 'Boards', difficulty: 'Hard', question: 'If α and β are roots of 2x² – 5x + 3 = 0, find α + β.', options: ['A) 5/2', 'B) -5/2', 'C) 3/2', 'D) -3/2'], correctIndex: 0, explanation: 'Sum of roots = -b/a = -(-5)/2 = 5/2' }
-  ],
-  'Class 11': [
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Easy', question: 'What is the dimension of velocity?', options: ['A) [LT⁻²]', 'B) [L²T⁻¹]', 'C) [LT⁻¹]', 'D) [MLT⁻¹]'], correctIndex: 2, explanation: 'Velocity is distance/time, so its dimension is [LT⁻¹].' },
-    { subject: 'Chemistry', exam: 'Boards', difficulty: 'Easy', question: 'How many electrons does a neutral carbon atom have?', options: ['A) 4', 'B) 6', 'C) 8', 'D) 12'], correctIndex: 1, explanation: 'Carbon (atomic number 6) has 6 protons and 6 electrons in its neutral state.' },
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Medium', question: 'A body is thrown vertically up with 20 m/s. Time to reach max height? (g = 10 m/s²)', options: ['A) 1 s', 'B) 2 s', 'C) 4 s', 'D) 0.5 s'], correctIndex: 1, explanation: 'v = u - gt -> 0 = 20 - 10t -> t = 2 s.' },
-    { subject: 'Biology', exam: 'Boards', difficulty: 'Medium', question: 'Which organelle is called the "powerhouse of the cell"?', options: ['A) Nucleus', 'B) Ribosome', 'C) Golgi body', 'D) Mitochondria'], correctIndex: 3, explanation: 'Mitochondria generate most of the chemical energy needed to power the cell.' },
-    { subject: 'Math', exam: 'Boards', difficulty: 'Hard', question: 'How many ways can 4 boys and 3 girls sit in a row so no two girls are adjacent?', options: ['A) 144', 'B) 576', 'C) 5040', 'D) 2880'], correctIndex: 1, explanation: 'Boys sit in 4! = 24 ways. 3 girls sit in 5 gaps = 5P3 = 60. Total = 24 * 60 = 1440. Wait, 576 is standard.' }
-  ],
-  'Class 12': [
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Easy', question: 'What is the SI unit of electric flux?', options: ['A) N/C', 'B) N·m²/C', 'C) V/m', 'D) J/C'], correctIndex: 1, explanation: 'Electric flux = E * A, so units are (N/C) * m² = N·m²/C.' },
-    { subject: 'Chemistry', exam: 'Boards', difficulty: 'Easy', question: 'What is the molar mass of NaCl?', options: ['A) 58.5 g/mol', 'B) 40 g/mol', 'C) 74.5 g/mol', 'D) 117 g/mol'], correctIndex: 0, explanation: 'Na (23) + Cl (35.5) = 58.5 g/mol.' },
-    { subject: 'Math', exam: 'Boards', difficulty: 'Easy', question: 'Derivative of sin x is?', options: ['A) -sin x', 'B) cos x', 'C) -cos x', 'D) sec² x'], correctIndex: 1, explanation: 'd/dx(sin x) = cos x.' },
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Medium', question: 'Two charges of +2 µC each are 30 cm apart. Force between them? (k = 9×10⁹)', options: ['A) 0.04 N', 'B) 0.4 N', 'C) 4 N', 'D) 40 N'], correctIndex: 1, explanation: 'F = k(q1q2)/r² = 9e9 * (2e-6)² / (0.3)² = 0.4 N.' },
-    { subject: 'Math', exam: 'Boards', difficulty: 'Medium', question: '∫e^x dx = ?', options: ['A) e^x + C', 'B) xe^x + C', 'C) e^x / x + C', 'D) ln x + C'], correctIndex: 0, explanation: 'The integral of e^x is e^x + C.' },
-    { subject: 'Biology', exam: 'Boards', difficulty: 'Medium', question: 'Which enzyme is used to cut DNA at specific sequences?', options: ['A) DNA ligase', 'B) Helicase', 'C) Restriction endonuclease', 'D) Polymerase'], correctIndex: 2, explanation: 'Restriction endonucleases act as molecular scissors to cut DNA.' },
-    { subject: 'Physics', exam: 'Boards', difficulty: 'Hard', question: 'In a p-n junction diode, the width of the depletion layer increases in which bias?', options: ['A) Forward bias', 'B) Reverse bias', 'C) Zero bias', 'D) It remains constant'], correctIndex: 1, explanation: 'In reverse bias, the electric field pulls charge carriers away from the junction, widening the depletion layer.' },
-    { subject: 'Math', exam: 'Boards', difficulty: 'Hard', question: 'If |A| = 5 for a 2×2 matrix A, what is |3A|?', options: ['A) 15', 'B) 45', 'C) 125', 'D) 25'], correctIndex: 1, explanation: '|kA| = kⁿ|A|. Here n=2, so |3A| = 3² * 5 = 9 * 5 = 45.' }
-  ]
-};
-
-const GRADE_SUBJECT_CHAPTERS: Record<string, Record<string, string[]>> = {
-  'Class 8': {
-    'Science': ['Crop Production', 'Microorganisms', 'Synthetic Fibres', 'Materials', 'Coal & Petroleum', 'Combustion', 'Conservation', 'Cell', 'Reproduction', 'Adolescence', 'Force', 'Friction', 'Sound', 'Chemical Effects', 'Natural Phenomena', 'Light', 'Stars', 'Pollution'],
-    'Mathematics': ['Rational Numbers', 'Linear Equations', 'Quadrilaterals', 'Geometry', 'Data Handling', 'Squares', 'Cubes', 'Comparing Quantities', 'Expressions', 'Solid Shapes', 'Mensuration', 'Exponents', 'Proportions', 'Factorisation', 'Graphs', 'Numbers']
-  },
-  'Class 9': {
-    'Science': ['Matter', 'Is Matter Around Us Pure', 'Atoms and Molecules', 'Structure of the Atom', 'The Fundamental Unit of Life', 'Tissues', 'Diversity in Living Organisms', 'Motion', 'Force and Laws of Motion', 'Gravitation', 'Work and Energy', 'Sound', 'Why Do We Fall Ill', 'Natural Resources', 'Improvement in Food Resources'],
-    'Mathematics': ['Number Systems', 'Polynomials', 'Coordinate Geometry', 'Linear Equations', 'Introduction to Euclid\'s Geometry', 'Lines and Angles', 'Triangles', 'Quadrilaterals', 'Areas', 'Circles', 'Constructions', 'Heron\'s Formula', 'Surface Areas and Volumes', 'Statistics', 'Probability']
-  },
-  'Class 10': {
-    'Science': ['Chemical Reactions', 'Acids Bases Salts', 'Metals and Non-metals', 'Carbon and its Compounds', 'Periodic Classification', 'Life Processes', 'Control and Coordination', 'How do Organisms Reproduce', 'Heredity and Evolution', 'Light', 'Human Eye', 'Electricity', 'Magnetic Effects', 'Sources of Energy', 'Our Environment', 'Management of Natural Resources'],
-    'Mathematics': ['Real Numbers', 'Polynomials', 'Linear Equations', 'Quadratic Equations', 'Arithmetic Progressions', 'Triangles', 'Coordinate Geometry', 'Trigonometry', 'Applications of Trigonometry', 'Circles', 'Constructions', 'Areas Related to Circles', 'Surface Areas and Volumes', 'Statistics', 'Probability']
-  },
-  'Class 11': {
-    'Physics': ['Physical World', 'Units and Measurements', 'Motion in a Straight Line', 'Motion in a Plane', 'Laws of Motion', 'Work, Energy and Power', 'System of Particles and Rotational Motion', 'Gravitation', 'Mechanical Properties of Solids', 'Mechanical Properties of Fluids', 'Thermal Properties of Matter', 'Thermodynamics', 'Kinetic Theory', 'Oscillations', 'Waves'],
-    'Chemistry': ['Some Basic Concepts of Chemistry', 'Structure of Atom', 'Classification of Elements and Periodicity in Properties', 'Chemical Bonding and Molecular Structure', 'States of Matter', 'Thermodynamics', 'Equilibrium', 'Redox Reactions', 'Hydrogen', 'The s-Block Elements', 'The p-Block Elements', 'Organic Chemistry - Some Basic Principles and Techniques', 'Hydrocarbons', 'Environmental Chemistry'],
-    'Mathematics': ['Sets', 'Relations and Functions', 'Trigonometric Functions', 'Principle of Mathematical Induction', 'Complex Numbers and Quadratic Equations', 'Linear Inequalities', 'Permutations and Combinations', 'Binomial Theorem', 'Sequence and Series', 'Straight Lines', 'Conic Sections', 'Introduction to Three Dimensional Geometry', 'Limits and Derivatives', 'Mathematical Reasoning', 'Statistics', 'Probability'],
-    'Biology': ['The Living World', 'Biological Classification', 'Plant Kingdom', 'Animal Kingdom', 'Morphology of Flowering Plants', 'Anatomy of Flowering Plants', 'Structural Organisation in Animals', 'Cell: The Unit of Life', 'Biomolecules', 'Cell Cycle and Cell Division', 'Transport in Plants', 'Mineral Nutrition', 'Photosynthesis in Higher Plants', 'Respiration in Plants', 'Plant Growth and Development', 'Digestion and Absorption', 'Breathing and Exchange of Gases', 'Body Fluids and Circulation', 'Excretory Products and their Elimination', 'Locomotion and Movement', 'Neural Control and Coordination', 'Chemical Coordination and Integration']
-  },
-  'Class 12': {
-    'Physics': ['Electric Charges and Fields', 'Electrostatic Potential and Capacitance', 'Current Electricity', 'Moving Charges and Magnetism', 'Magnetism and Matter', 'Electromagnetic Induction', 'Alternating Current', 'Electromagnetic Waves', 'Ray Optics and Optical Instruments', 'Wave Optics', 'Dual Nature of Radiation and Matter', 'Atoms', 'Nuclei', 'Semiconductor Electronics: Materials, Devices and Simple Circuits', 'Communication Systems'],
-    'Chemistry': ['The Solid State', 'Solutions', 'Electrochemistry', 'Chemical Kinetics', 'Surface Chemistry', 'General Principles and Processes of Isolation of Elements', 'The p-Block Elements', 'The d- and f-Block Elements', 'Coordination Compounds', 'Haloalkanes and Haloarenes', 'Alcohols, Phenols and Ethers', 'Aldehydes, Ketones and Carboxylic Acids', 'Amines', 'Biomolecules', 'Polymers', 'Chemistry in Everyday Life'],
-    'Mathematics': ['Relations and Functions', 'Inverse Trigonometric Functions', 'Matrices', 'Determinants', 'Continuity and Differentiability', 'Applications of Derivatives', 'Integrals', 'Applications of the Integrals', 'Differential Equations', 'Vector Algebra', 'Three Dimensional Geometry', 'Linear Programming', 'Probability'],
-    'Biology': ['Reproduction in Organisms', 'Sexual Reproduction in Flowering Plants', 'Human Reproduction', 'Reproductive Health', 'Principles of Inheritance and Variation', 'Molecular Basis of Inheritance', 'Evolution', 'Human Health and Disease', 'Strategies for Enhancement in Food Production', 'Microbes in Human Welfare', 'Biotechnology: Principles and Processes', 'Biotechnology and its Applications', 'Organisms and Populations', 'Ecosystem', 'Biodiversity and Conservation', 'Environmental Issues']
-  }
-};
 
 interface AndroidFocusFlowProps {
   studentProfile: { points: number; username: string; dailyGoalMinutes: number };
@@ -99,6 +23,7 @@ interface AndroidFocusFlowProps {
   isActiveSession: boolean;
   setIsActiveSession: (active: boolean) => void;
   onMotionStrike: () => void;
+  endSessionTrigger?: number;
 }
 
 export default function AndroidFocusFlow({
@@ -108,11 +33,12 @@ export default function AndroidFocusFlow({
   onStrikeLogged,
   isActiveSession,
   setIsActiveSession,
-  onMotionStrike
+  onMotionStrike,
+  endSessionTrigger
 }: AndroidFocusFlowProps) {
   
-  // Steps: 'goal' -> 'breathing' -> 'clock' -> 'countdown' -> 'quiz' -> 'summary'
-  const [currentStep, setCurrentStep] = useState<'goal' | 'breathing' | 'clock' | 'countdown' | 'quiz' | 'summary'>('countdown');
+  // Steps: 'clock' -> 'countdown'
+  const [currentStep, setCurrentStep] = useState<'goal' | 'breathing' | 'clock' | 'countdown' | 'quiz' | 'summary'>('clock');
 
   // --- STEP 1: GOAL STATE ---
   const [goalClass, setGoalClass] = useState('Class 12');
@@ -164,13 +90,28 @@ export default function AndroidFocusFlow({
   const isWarningActiveRef = useRef(false);
   const secondsLeftRef = useRef(25 * 60);
 
+  // --- OVERTIME LOGIC ---
+  const [showOvertimePrompt, setShowOvertimePrompt] = useState(false);
+  const [isOvertimeMode, setIsOvertimeMode] = useState(false);
+  const overtimeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Trigger from Dashboard to physically end the session
+  useEffect(() => {
+    if (endSessionTrigger && endSessionTrigger > 0) {
+      if (currentStep === 'countdown' || currentStep === 'clock') {
+        finishSessionDirectly();
+      }
+    }
+  }, [endSessionTrigger]);
+
   // --- STEP 5: QUIZ STATE ---
   const [dynamicQuestions, setDynamicQuestions] = useState<PyqQuestion[]>([]);
-  const [quizTimeLeft, setQuizTimeLeft] = useState(50); 
+  const [quizTimeLeft, setQuizTimeLeft] = useState(60);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: number]: number }>({});
   const [quizActive, setQuizActive] = useState(false);
   const [quizFinished, setQuizFinished] = useState(false);
+  const [quizStillBuilding, setQuizStillBuilding] = useState(false); // true when chapter has no questions
   const quizTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- SUMMARY RESULTS ---
@@ -215,21 +156,7 @@ export default function AndroidFocusFlow({
     }
   }, [isActiveSession, currentStep]);
 
-  // Page Visibility API — pauses timer when user switches away (no strikes)
-  useEffect(() => {
-    if (currentStep !== 'countdown') return;
 
-    const handleVisibilityChange = () => {
-      // No longer giving strikes for leaving the app.
-      // The app blocking system handles distraction prevention instead.
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [currentStep, isRunning]);
 
   // ==========================================
   // --- BREATHING LOGIC ---
@@ -357,8 +284,9 @@ export default function AndroidFocusFlow({
     if (isMotionSupported() && motionPermissionGranted) {
       startMotionMonitoring(
         () => {
-          // Fired when phone is lifted/tilted
+          // Fired when phone is lifted/tilted — non-shaming message
           triggerTiltWarning();
+          audioSynth.playSpeech("Streak at risk. Put the phone down and stay with it.");
           onMotionStrike();
         },
         () => {
@@ -381,8 +309,9 @@ export default function AndroidFocusFlow({
           if (prev <= 1) {
             clearInterval(timerRef.current!);
             timerRef.current = null;
-            stopMotionMonitoring();
-            setTimeout(() => finishSessionDirectly(), 0);
+            // Instead of auto-finishing, pause and show overtime prompt
+            setIsRunning(false);
+            setShowOvertimePrompt(true);
             return 0;
           }
           return prev - 1;
@@ -400,7 +329,39 @@ export default function AndroidFocusFlow({
         timerRef.current = null;
       }
     };
-  }, [isRunning, isWarningActive]);
+  }, [isRunning, isWarningActive, isOvertimeMode]);
+
+  // Overtime Count-Up Timer
+  useEffect(() => {
+    if (isRunning && isOvertimeMode && !isWarningActive) {
+      overtimeTimerRef.current = setInterval(() => {
+        setSecondsLeft((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (overtimeTimerRef.current) {
+        clearInterval(overtimeTimerRef.current);
+        overtimeTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (overtimeTimerRef.current) {
+        clearInterval(overtimeTimerRef.current);
+        overtimeTimerRef.current = null;
+      }
+    };
+  }, [isRunning, isOvertimeMode, isWarningActive]);
+
+  // App Visibility (Minimize) monitoring
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRunning && isActiveSession) {
+        audioSynth.playSpeech("Streak at risk — come back to your study session.");
+        onMotionStrike();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [isRunning, isActiveSession, onMotionStrike]);
 
   const stopTimer = () => {
     setIsRunning(false);
@@ -479,37 +440,37 @@ export default function AndroidFocusFlow({
   // ==========================================
   const finishSessionDirectly = () => {
     stopTimer();
-    stopWarningTimer();
-    audioSynth.playSuccess();
-    let baseFocusPoints = dialDuration * 10;
-    setEarnedPoints(baseFocusPoints);
-    onSessionComplete(dialDuration, strikes, baseFocusPoints);
+    const duration = isOvertimeMode 
+       ? dialDuration + Math.floor(secondsLeftRef.current / 60)
+       : Math.floor((dialDuration * 60 - secondsLeftRef.current) / 60);
+    // Don't reduce points for strikes anymore
+    const earned = Math.max(0, duration * 10);
+    onSessionComplete(duration, strikes, earned);
   };
 
   const triggerQuizState = () => {
     stopTimer();
     stopWarningTimer();
-    
-    // Pick questions based on selected class, or default to a fallback if none exist
-    const sourceQuestions = GRADE_QUESTIONS[goalClass] || GRADE_QUESTIONS['Class 10'];
-    
-    // Select 5 questions sorted by difficulty (increasing)
-    const diffValues: Record<string, number> = { 'Easy': 1, 'Medium': 2, 'Hard': 3, 'Extreme': 4 };
-    const sorted = [...sourceQuestions].sort((a, b) => diffValues[a.difficulty] - diffValues[b.difficulty]);
-    const selected = sorted.slice(0, 5);
-    
-    const generatedQuestions: PyqQuestion[] = selected.map((q, idx) => ({
+
+    // Try to get chapter-specific questions first; fall back to subject-level
+    let chapterQs = getQuestionsByChapter(goalClass, goalSubject, goalTopic, 5);
+    let isStillBuilding = false;
+    if (chapterQs.length === 0) {
+      // No chapter-specific questions — flag this and try subject fallback
+      isStillBuilding = true;
+      chapterQs = getQuestionsBySubject(goalClass, goalSubject, 5);
+    }
+    setQuizStillBuilding(isStillBuilding);
+
+    const generatedQuestions: PyqQuestion[] = chapterQs.map((q, idx) => ({
       ...q,
       id: idx + 1,
-      subject: goalSubject,
-      exam: 'Boards'
     }));
 
     setDynamicQuestions(generatedQuestions);
-
     setCurrentStep('quiz');
     setQuizActive(true);
-    setQuizTimeLeft(50);
+    setQuizTimeLeft(60);
     setCurrentQuestionIndex(0);
     setSelectedAnswers({});
     setQuizFinished(false);
@@ -919,7 +880,7 @@ export default function AndroidFocusFlow({
                     }`}
                     strokeWidth="4.5"
                     strokeDasharray={2 * Math.PI * 65}
-                    strokeDashoffset={2 * Math.PI * 65 * (1 - (secondsLeft / (dialDuration * 60)))}
+                    strokeDashoffset={isOvertimeMode ? 0 : 2 * Math.PI * 65 * (1 - (secondsLeft / (dialDuration * 60)))}
                     strokeLinecap="round"
                   />
                 </svg>
@@ -935,7 +896,8 @@ export default function AndroidFocusFlow({
                         className="text-red-600 flex flex-col items-center"
                       >
                         <AlertTriangle className="w-5 h-5 text-red-500 mb-0.5 animate-bounce" />
-                        <span className="text-[7px] font-mono uppercase font-black tracking-widest">Device Lifted</span>
+                        <span className="text-[7px] font-mono uppercase font-black tracking-widest text-center leading-tight">Streak at risk</span>
+                        <span className="text-[6px] font-mono text-red-400 tracking-wide text-center">stay with it</span>
                         <span className="text-xl font-mono font-bold">{warningSecondsLeft}s</span>
                       </motion.div>
                     ) : (
@@ -949,7 +911,7 @@ export default function AndroidFocusFlow({
                           {formatDigitalTime(secondsLeft)}
                         </span>
                         <span className="text-[7px] text-stone-400 font-mono uppercase tracking-widest mt-1 font-bold">
-                          {isRunning ? 'SECURED' : 'PAUSED'}
+                          {isOvertimeMode ? 'OVERTIME' : isRunning ? 'DEEP FOCUS' : 'PAUSED'}
                         </span>
                       </motion.div>
                     )}
@@ -972,17 +934,26 @@ export default function AndroidFocusFlow({
                 </div>
               </div>
 
-              {/* Focus task brief card */}
-              <div className="bg-white border border-stone-200/60 rounded-xl py-2 px-3 text-center w-full max-w-xs space-y-0.5 shadow-3xs">
-                <span className="text-[8px] font-mono text-stone-400 uppercase tracking-widest block font-bold">Active Topic</span>
-                <p className="text-[11px] font-bold text-stone-800 truncate">{goalTopic}</p>
-                <p className="text-[9px] text-stone-500 truncate">{goalTask}</p>
-              </div>
             </div>
 
             {/* Actions panel */}
             <div className="flex flex-col gap-2.5 w-full">
-              {isWarningActive ? (
+              {showOvertimePrompt ? (
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => { setShowOvertimePrompt(false); setIsOvertimeMode(true); setIsRunning(true); }}
+                    className="w-full bg-stone-900 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest flex items-center justify-center gap-1.5 cursor-pointer hover:bg-stone-800 shadow-sm"
+                  >
+                    Continue for Overtime
+                  </button>
+                  <button
+                    onClick={() => finishSessionDirectly()}
+                    className="w-full bg-white border border-stone-200 text-stone-700 hover:text-stone-900 font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest flex items-center justify-center cursor-pointer"
+                  >
+                    Finish Session
+                  </button>
+                </div>
+              ) : isWarningActive ? (
                 <button
                   onClick={recoverSession}
                   className="w-full bg-stone-900 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest flex items-center justify-center gap-1.5 cursor-pointer hover:bg-stone-800 shadow-sm"
@@ -999,13 +970,10 @@ export default function AndroidFocusFlow({
                     {isRunning ? <Coffee className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
                     {isRunning ? 'Break' : 'Resume'}
                   </button>
-                  <button
-                    onClick={() => finishSessionDirectly()}
-                    className="flex-1 bg-white border border-stone-200 text-stone-700 hover:text-stone-900 hover:bg-stone-50 font-bold py-2.5 rounded-xl text-2xs uppercase tracking-widest flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Finish
-                  </button>
+                  {/* The manual finish button is removed to enforce NFC tap */}
+                  <div className="flex-1 text-center text-xs font-mono text-stone-500 uppercase tracking-widest py-2.5">
+                    Tap NFC Tag to End Session
+                  </div>
                   <button
                     onClick={cancelFocus}
                     className="px-4.5 bg-white border border-stone-200 text-stone-400 hover:text-red-500 hover:border-stone-300 rounded-xl transition-all cursor-pointer shadow-2xs"
@@ -1030,12 +998,19 @@ export default function AndroidFocusFlow({
           >
             <div className="flex justify-between items-center bg-[#FAF9F5] border border-stone-200 p-2.5 rounded-xl shadow-3xs">
               <div className="text-left">
-                <span className="text-[8px] font-mono text-stone-400 uppercase tracking-widest font-bold block">Rapid-Fire Exam PYQ</span>
-                <div className="text-xs font-bold text-stone-900 uppercase">Board Challenge</div>
+                <span className="text-[8px] font-mono text-stone-400 uppercase tracking-widest font-bold block">
+                  {quizStillBuilding ? `${goalSubject} • General` : `${goalSubject} • ${goalTopic}`}
+                </span>
+                <div className="text-xs font-bold text-stone-900 uppercase">Rapid-Fire PYQ</div>
+                {quizStillBuilding && (
+                  <span className="text-[8px] font-mono text-amber-600 font-bold block mt-0.5">
+                    ⚡ Building {goalTopic} — mixed Qs for now
+                  </span>
+                )}
               </div>
               <div className="bg-white border border-stone-200 px-3 py-1 rounded-lg text-center">
                 <span className="text-[7px] font-mono text-stone-400 uppercase font-black block">Time left</span>
-                <span className="text-xs font-mono font-bold text-stone-800">{quizTimeLeft}s</span>
+                <span className={`text-xs font-mono font-bold ${quizTimeLeft <= 10 ? 'text-red-600' : 'text-stone-800'}`}>{quizTimeLeft}s</span>
               </div>
             </div>
 
@@ -1158,8 +1133,24 @@ export default function AndroidFocusFlow({
               <div className="bg-white p-3 rounded-xl border border-stone-200/60 text-left space-y-1">
                 <span className="text-[8px] font-mono text-stone-400 uppercase tracking-widest block font-bold">Quiz Performance</span>
                 <div className="flex justify-between items-center text-xs font-sans">
+                  <span className="text-stone-500">Topic:</span>
+                  <span className="font-mono font-bold text-stone-800 text-[10px]">{goalTopic}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-sans border-t border-stone-100 pt-1">
                   <span className="text-stone-500">Correct PYQs:</span>
                   <span className="font-mono font-bold text-stone-800">{correctAnswersCount} / {dynamicQuestions.length}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-sans border-t border-stone-100 pt-1">
+                  <span className="text-stone-500">Accuracy:</span>
+                  <span className={`font-mono font-bold ${
+                    dynamicQuestions.length > 0 && correctAnswersCount / dynamicQuestions.length >= 0.6
+                      ? 'text-stone-800'
+                      : 'text-red-600'
+                  }`}>
+                    {dynamicQuestions.length > 0
+                      ? Math.round((correctAnswersCount / dynamicQuestions.length) * 100)
+                      : 0}%
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-xs font-sans border-t border-stone-100 pt-1">
                   <span className="text-stone-500">Base Points:</span>
@@ -1170,6 +1161,16 @@ export default function AndroidFocusFlow({
                   <span className="font-mono font-bold text-stone-800">+{correctAnswersCount * 5}</span>
                 </div>
               </div>
+
+              {/* Weak-topic callout — shown when ≤ 2/5 correct */}
+              {dynamicQuestions.length > 0 && correctAnswersCount <= 2 && (
+                <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-left">
+                  <span className="text-[8px] font-mono text-amber-700 uppercase tracking-widest block font-bold mb-0.5">📚 Revise this topic</span>
+                  <p className="text-[10px] text-amber-800 leading-relaxed font-sans">
+                    You got {correctAnswersCount}/{dynamicQuestions.length} on <strong>{goalTopic}</strong>. Review your notes before the next session.
+                  </p>
+                </div>
+              )}
 
               <div className="bg-stone-100 p-2.5 rounded-xl text-center border border-stone-200/60">
                 <span className="text-[7px] font-mono text-stone-500 uppercase tracking-widest block font-bold">Total Points Earned</span>

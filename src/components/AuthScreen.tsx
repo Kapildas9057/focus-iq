@@ -1,7 +1,7 @@
 import React, { useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Shield, Smartphone, Mail, User, ArrowRight, Zap, CheckCircle, Users
+  Shield, Smartphone, Mail, User, ArrowRight, Zap, CheckCircle, Users, BookOpen, Brain, MapPin
 } from 'lucide-react';
 import { UserRole, UserProfile } from '../types';
 import { auth, getUserProfile, syncUserProfile } from '../utils/firebase';
@@ -19,15 +19,30 @@ interface AuthScreenProps {
 
 const googleProvider = new GoogleAuthProvider();
 
+// Study challenges shown on the profile-enrichment screen
+const STUDY_CHALLENGES = [
+  { id: 'retention', icon: Brain, label: "I study but don't retain", color: 'text-violet-600 bg-violet-50 border-violet-200' },
+  { id: 'distraction', icon: Smartphone, label: 'I get distracted easily', color: 'text-rose-600 bg-rose-50 border-rose-200' },
+  { id: 'direction', icon: MapPin, label: "I don't know where to start", color: 'text-amber-600 bg-amber-50 border-amber-200' },
+] as const;
+
 export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState<boolean>(true);
   const [role, setRole] = useState<UserRole>('student');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [username, setUsername] = useState<string>('');
+  const [grade, setGrade] = useState<string>('Class 10');
+  const [board, setBoard] = useState<string>('CBSE');
   const [loading, setLoading] = useState<boolean>(false);
   const [googleLoading, setGoogleLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // 2-screen Google onboarding state
+  // 'auth' = main login/register screen; 'profile' = board/class/challenge for NEW Google users
+  const [onboardingStep, setOnboardingStep] = useState<'auth' | 'profile'>('auth');
+  const [pendingGoogleProfile, setPendingGoogleProfile] = useState<UserProfile | null>(null);
+  const [studyChallenge, setStudyChallenge] = useState<string | null>(null);
 
   // ---- GOOGLE SIGN-IN ----
   const handleGoogleSignIn = async () => {
@@ -40,6 +55,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
       let existingUser = await getUserProfile(user.uid);
       if (existingUser) {
+        // Returning user — check role and proceed
         if (existingUser.role !== role) {
           setErrorMsg(`This Google account is registered as a "${existingUser.role}". Please select the correct role above.`);
           setGoogleLoading(false);
@@ -47,7 +63,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         }
         onAuthSuccess(existingUser as UserProfile);
       } else {
-        const newUser: UserProfile = {
+        // NEW Google user — build a provisional profile and show enrichment screen
+        const provisionalProfile: UserProfile = {
           uid: user.uid,
           email: user.email || '',
           role: role,
@@ -55,9 +72,21 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           points: 0,
           streak: 0,
           dailyGoalMinutes: role === 'student' ? 45 : 0,
+          grade: role === 'student' ? 'Class 10' : undefined,
+          board: role === 'student' ? 'CBSE' : undefined,
         };
-        await syncUserProfile(user.uid, newUser);
-        onAuthSuccess(newUser);
+
+        if (role === 'student') {
+          // Show profile enrichment screen
+          setPendingGoogleProfile(provisionalProfile);
+          setGoogleLoading(false);
+          setOnboardingStep('profile');
+          return;
+        } else {
+          // Parents skip the enrichment screen
+          await syncUserProfile(user.uid, provisionalProfile);
+          onAuthSuccess(provisionalProfile);
+        }
       }
       setGoogleLoading(false);
     } catch (error: any) {
@@ -73,6 +102,30 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       }
       setGoogleLoading(false);
     }
+  };
+
+  // ---- PROFILE ENRICHMENT SUBMIT (new Google users) ----
+  const handleProfileComplete = async () => {
+    if (!pendingGoogleProfile) return;
+    setGoogleLoading(true);
+
+    const finalProfile: UserProfile = {
+      ...pendingGoogleProfile,
+      grade,
+      board,
+      studyChallenge: studyChallenge as any || undefined,
+    };
+
+    try {
+      // Persist grade/board immediately — don't wait for anything else
+      await syncUserProfile(finalProfile.uid, finalProfile);
+      onAuthSuccess(finalProfile);
+    } catch (e) {
+      console.error('Profile save error:', e);
+      // Still proceed — data will sync on next load
+      onAuthSuccess(finalProfile);
+    }
+    setGoogleLoading(false);
   };
 
   // ---- EMAIL/PASSWORD SUBMIT ----
@@ -169,6 +222,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           points: 0,
           streak: 0,
           dailyGoalMinutes: role === 'student' ? 45 : 0,
+          grade: role === 'student' ? grade : undefined,
+          board: role === 'student' ? board : undefined,
         };
         await syncUserProfile(firebaseUser.uid, newUser);
 
@@ -193,6 +248,116 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     }
   };
 
+  // ─── SCREEN 2: Profile enrichment for new Google users ────────────────────
+  if (onboardingStep === 'profile') {
+    return (
+      <div className="min-h-screen bg-[#F8F6F2] text-stone-800 flex flex-col items-center justify-center p-5 relative">
+        <div className="w-full max-w-sm relative z-10">
+
+          {/* Brand hint */}
+          <div className="mb-7 text-center">
+            <div className="w-10 h-10 bg-stone-900 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm">
+              <BookOpen className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-xl font-black tracking-tight text-stone-900">
+              Almost there
+            </h1>
+            <p className="text-xs text-stone-500 mt-1">Tell us a little about your studies</p>
+          </div>
+
+          <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-sm space-y-5">
+
+            {/* Board + Class side by side */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Board</label>
+                <select
+                  value={board}
+                  onChange={(e) => setBoard(e.target.value)}
+                  className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-800 focus:outline-none focus:border-stone-400 transition-all font-sans"
+                >
+                  <option value="CBSE">CBSE</option>
+                  <option value="ICSE">ICSE</option>
+                  <option value="State Board">State</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Class</label>
+                <select
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-800 focus:outline-none focus:border-stone-400 transition-all font-sans"
+                >
+                  <option value="Class 8">Class 8</option>
+                  <option value="Class 9">Class 9</option>
+                  <option value="Class 10">Class 10</option>
+                  <option value="Class 11">Class 11</option>
+                  <option value="Class 12">Class 12</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Study challenge — optional, skippable */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-mono text-stone-500 uppercase tracking-wider font-bold">
+                  Biggest study challenge?
+                </label>
+                <span className="text-[9px] text-stone-400 font-mono">Optional</span>
+              </div>
+              <div className="space-y-2">
+                {STUDY_CHALLENGES.map(({ id, icon: Icon, label, color }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setStudyChallenge(studyChallenge === id ? null : id)}
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-xs font-medium text-left transition-all cursor-pointer ${
+                      studyChallenge === id
+                        ? color + ' shadow-sm'
+                        : 'bg-white border-stone-200 text-stone-600 hover:border-stone-300'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Continue button */}
+            <button
+              onClick={handleProfileComplete}
+              disabled={googleLoading}
+              className="w-full bg-stone-900 hover:bg-stone-800 active:scale-[0.98] disabled:opacity-55 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all font-mono uppercase tracking-widest cursor-pointer shadow-sm"
+            >
+              {googleLoading ? (
+                <>
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Start Studying
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+
+            {/* Skip challenge */}
+            <button
+              type="button"
+              onClick={() => { setStudyChallenge(null); handleProfileComplete(); }}
+              className="w-full text-center text-[10px] text-stone-400 font-mono hover:text-stone-600 transition-colors py-1 cursor-pointer"
+            >
+              Skip for now
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── SCREEN 1: Main auth screen ──────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#F8F6F2] text-stone-800 flex flex-col items-center justify-center p-4 relative">
       <div className="w-full max-w-md relative z-10 flex flex-col items-center">
@@ -374,6 +539,38 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                     onChange={(e) => setUsername(e.target.value)}
                     className="w-full bg-white border border-stone-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-stone-400 transition-all font-sans"
                   />
+                </div>
+              </div>
+            )}
+
+            {/* Input Grade and Board (Only for Student Register) */}
+            {!isLogin && role === 'student' && (
+              <div className="grid grid-cols-2 gap-3 text-left">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Grade</label>
+                  <select
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-800 focus:outline-none focus:border-stone-400 transition-all font-sans"
+                  >
+                    <option value="Class 8">Class 8</option>
+                    <option value="Class 9">Class 9</option>
+                    <option value="Class 10">Class 10</option>
+                    <option value="Class 11">Class 11</option>
+                    <option value="Class 12">Class 12</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Board</label>
+                  <select
+                    value={board}
+                    onChange={(e) => setBoard(e.target.value)}
+                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-xs text-stone-800 focus:outline-none focus:border-stone-400 transition-all font-sans"
+                  >
+                    <option value="CBSE">CBSE</option>
+                    <option value="ICSE">ICSE</option>
+                    <option value="State Board">State</option>
+                  </select>
                 </div>
               </div>
             )}

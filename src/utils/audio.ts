@@ -128,6 +128,32 @@ class AudioSynthesizer {
       console.warn('Audio play failed', e);
     }
   }
+  playSpeech(text: string) {
+    try {
+      if ('speechSynthesis' in window) {
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        
+        // Try to find a distinct/robotic voice if possible, otherwise default
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          // Prefer English voices, maybe female or a specific one if available
+          const preferredVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices[0];
+          if (preferredVoice) {
+            utterance.voice = preferredVoice;
+          }
+        }
+        
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch (e) {
+      console.warn('Speech synthesis failed', e);
+    }
+  }
 }
 
 export const audioSynth = new AudioSynthesizer();

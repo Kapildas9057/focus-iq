@@ -73,15 +73,29 @@ export default function App() {
   const [studentProfile, setStudentProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('focusloop_student_profile');
     if (saved) return JSON.parse(saved);
-    // Mock data for realistic screenshot
+    // MOCK DATA — dev/demo builds only. Never shown to real users in production.
+    if (import.meta.env.DEV) {
+      return {
+        uid: 'mock-user-123',
+        email: 'creator@focusloop.app',
+        role: 'student',
+        username: 'FocusLoopCreator',
+        points: 10850,
+        streak: 14,
+        dailyGoalMinutes: 120,
+        grade: 'Class 10',
+        board: 'CBSE',
+      };
+    }
+    // Real new users start fresh
     return {
-      uid: 'mock-user-123',
-      email: 'creator@focusloop.app',
+      uid: '',
+      email: '',
       role: 'student',
-      username: 'FocusLoopCreator',
-      points: 10850,
-      streak: 14,
-      dailyGoalMinutes: 120,
+      username: '',
+      points: 0,
+      streak: 0,
+      dailyGoalMinutes: 45,
     };
   });
 
@@ -93,8 +107,9 @@ export default function App() {
   const [focusHistory, setFocusHistory] = useState<FocusSession[]>(() => {
     const saved = localStorage.getItem('focusloop_focus_history');
     if (saved) return JSON.parse(saved);
+    // MOCK DATA — dev/demo builds only
+    if (!import.meta.env.DEV) return [];
     const mockSessions: FocusSession[] = [];
-    // Dates from June 25, 2026 to July 8, 2026 (14 days)
     const startDate = new Date('2026-06-25T10:00:00Z');
     const durations = [35, 45, 40, 60, 55, 75, 80, 85, 95, 100, 105, 115, 120, 130];
     durations.forEach((d, i) => {
@@ -534,6 +549,17 @@ export default function App() {
     triggerNotification('🔐 Sync code generated! Share with your student.');
   };
 
+  const handleProfileUpdate = async (updates: Partial<UserProfile>) => {
+    setStudentProfile((prev) => {
+      const newProfile = { ...prev, ...updates };
+      localStorage.setItem('focusloop_student_profile', JSON.stringify(newProfile));
+      if (newProfile.uid && !import.meta.env.DEV) {
+        syncUserProfile(newProfile.uid, newProfile).catch(console.error);
+      }
+      return newProfile;
+    });
+  };
+
   const handleVerifyPairingCode = async (codeInput: string): Promise<boolean> => {
     if (isPairingLocked) return false;
 
@@ -580,12 +606,8 @@ export default function App() {
   const handleMotionStrike = () => {
     if (!isActiveSession) return;
     
-    // Deduct points for the strike penalty
-    setStudentProfile(prev => ({
-      ...prev,
-      points: Math.max(0, prev.points - 50)
-    }));
-    triggerNotification('🚨 Phone movement detected! -50 PTS penalty.');
+    // User requested NO point deduction for strikes, just audio and notification
+    triggerNotification('🚨 Strike Recorded: Phone movement detected or app minimized.');
   };
 
   // --- Render ---
@@ -635,6 +657,8 @@ export default function App() {
                 onDistractionAttempt={handleDistractionAttempt}
                 onMotionStrike={handleMotionStrike}
                 onSignOut={handleSignOut}
+                onProfileUpdate={handleProfileUpdate}
+                distractionBlockCount={distractionAttempts.length}
               />
             </motion.div>
           ) : (

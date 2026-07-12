@@ -16,6 +16,8 @@ import AppBlocker from './AppBlocker';
 import Leaderboard from './Leaderboard';
 import BreathingTechnique from './BreathingTechnique';
 import PostStudyLog from './PostStudyLog';
+import FlexCard from './FlexCard';
+import SquadView from './SquadView';
 
 interface StudentDashboardProps {
   studentProfile: UserProfile;
@@ -39,6 +41,8 @@ interface StudentDashboardProps {
   onDistractionAttempt: (appName: string) => void;
   onMotionStrike: () => void;
   onSignOut: () => void;
+  onProfileUpdate: (updates: Partial<UserProfile>) => void;
+  distractionBlockCount?: number;
 }
 
 export default function StudentDashboard({
@@ -58,7 +62,9 @@ export default function StudentDashboard({
   leaderboard,
   onDistractionAttempt,
   onMotionStrike,
-  onSignOut
+  onSignOut,
+  onProfileUpdate,
+  distractionBlockCount = 0,
 }: StudentDashboardProps) {
   
   // NFC + DND hook
@@ -80,26 +86,34 @@ export default function StudentDashboard({
     simulateTagDetect,
   } = useNfcDnd();
 
-  // Auto-enable DND when an NFC tag is detected
-  useEffect(() => {
-    if (scanStatus === 'detected' && lastTagUid) {
-      (async () => {
-        const granted = await checkDndPermission();
-        if (granted) {
-          await enableDnd('priority');
-        } else {
-          await requestDndPermission();
-        }
-        // Auto-start the focus flow!
-        setTimeout(() => setFocusPhase('breathing'), 800);
-      })();
-    }
-  }, [scanStatus, lastTagUid]);
+
 
   // Navigation: all tabs always accessible (no NFC gating)
   const [activeTab, setActiveTab] = useState<'focus' | 'shield' | 'leaderboard' | 'metrics'>('focus');
   const [focusPhase, setFocusPhase] = useState<'scanning' | 'breathing' | 'studying' | 'logging'>('scanning');
   const [pendingSessionData, setPendingSessionData] = useState<{ durationMinutes: number; strikes: number; pointsEarned: number } | null>(null);
+  const [endSessionTrigger, setEndSessionTrigger] = useState(0);
+
+  // Auto-enable DND and route NFC taps
+  useEffect(() => {
+    if (scanStatus === 'detected' && lastTagUid) {
+      (async () => {
+        if (focusPhase === 'scanning') {
+          const granted = await checkDndPermission();
+          if (granted) {
+            await enableDnd('priority');
+          } else {
+            await requestDndPermission();
+          }
+          // Transition to breathing first — then onComplete fires studying
+          setTimeout(() => setFocusPhase('breathing'), 800);
+        } else if (focusPhase === 'studying') {
+          // Second NFC tap: end the session
+          setEndSessionTrigger(prev => prev + 1);
+        }
+      })();
+    }
+  }, [scanStatus, lastTagUid, focusPhase]);
 
   const [codeInputValue, setCodeInputValue] = useState('');
   const [pairingError, setPairingError] = useState<string | null>(null);
@@ -295,12 +309,11 @@ export default function StudentDashboard({
               <div className="flex gap-2">
                 {scanStatus === 'idle' || scanStatus === 'error' || scanStatus === 'unavailable' ? (
                   <button
-                    onClick={startScanning}
-                    disabled={!nfcAvailable}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-mono font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={simulateTagDetect} // Allow dev simulation on web
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-mono font-bold uppercase tracking-wider cursor-pointer hover:bg-stone-800 transition-all"
                   >
                     <Nfc className="w-3.5 h-3.5" />
-                    Start Scan
+                    Simulate Scan
                   </button>
                 ) : scanStatus === 'scanning' ? (
                   <button
@@ -343,12 +356,11 @@ export default function StudentDashboard({
             </div>
             )}
 
+
+            {/* BREATHING — activated after NFC tap, before session starts */}
             {focusPhase === 'breathing' && (
-              <BreathingTechnique 
-                onComplete={() => {
-                  setFocusPhase('studying');
-                  setIsActiveSession(true);
-                }} 
+              <BreathingTechnique
+                onComplete={() => setFocusPhase('studying')}
               />
             )}
 
@@ -365,11 +377,13 @@ export default function StudentDashboard({
                 isActiveSession={isActiveSession}
                 setIsActiveSession={setIsActiveSession}
                 onMotionStrike={onMotionStrike}
+                endSessionTrigger={endSessionTrigger}
               />
             )}
 
             {focusPhase === 'logging' && pendingSessionData && (
               <PostStudyLog 
+                studentProfile={studentProfile}
                 pendingPoints={pendingSessionData.pointsEarned}
                 onLogComplete={handleLogComplete}
               />
@@ -515,6 +529,28 @@ export default function StudentDashboard({
                 )}
               </div>
             </div>
+
+            {/* Study Squads */}
+            <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+              <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Study Squads</span>
+              <SquadView
+                studentProfile={studentProfile}
+                onProfileUpdate={onProfileUpdate}
+              />
+            </div>
+
+            {/* Flex Card — always visible, streak gate inside */}
+            <div className="bg-[#FAF9F5] border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
+              <div className="px-4 pt-3 pb-1">
+                <span className="text-[10px] font-mono text-stone-500 uppercase tracking-wider block font-bold">Your Flex Card</span>
+              </div>
+              <FlexCard
+                studentProfile={studentProfile}
+                focusHistory={focusHistory}
+                distractionBlockCount={distractionBlockCount}
+              />
+            </div>
+
           </div>
 
         </div>

@@ -216,3 +216,160 @@ export async function getUserByEmail(email: string) {
   }
 }
 
+// ─── Squad Functions ─────────────────────────────────────────────────────────
+
+/** Generates a 6-char alphanumeric sync code */
+function generateSyncCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+export async function createSquad(name: string, creatorUid: string): Promise<string | null> {
+  try {
+    const syncCode = generateSyncCode();
+    const squadRef = doc(collection(db, 'squads'));
+    const squad = {
+      id: squadRef.id,
+      name,
+      syncCode,
+      createdBy: creatorUid,
+      createdAt: new Date().toISOString(),
+      memberIds: [creatorUid],
+    };
+    await setDoc(squadRef, squad);
+    // Store squadId on the user's profile
+    await updateDoc(doc(db, 'users', creatorUid), { squadId: squadRef.id });
+    return squadRef.id;
+  } catch (e) {
+    console.error("Failed to create squad in Firebase:", e);
+    return null;
+  }
+}
+
+export async function getSquad(squadId: string) {
+  try {
+    const snap = await getDoc(doc(db, 'squads', squadId));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.error("Failed to get squad from Firebase:", e);
+    return null;
+  }
+}
+
+export async function joinSquadByCode(syncCode: string, uid: string): Promise<{ squadId: string } | null> {
+  try {
+    const q = query(collection(db, 'squads'), where('syncCode', '==', syncCode.toUpperCase()));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+
+    const squadDoc = snap.docs[0];
+    const squadId = squadDoc.id;
+    const memberIds: string[] = squadDoc.data().memberIds || [];
+    if (!memberIds.includes(uid)) {
+      memberIds.push(uid);
+      await updateDoc(doc(db, 'squads', squadId), { memberIds });
+    }
+    await updateDoc(doc(db, 'users', uid), { squadId });
+    return { squadId };
+  } catch (e) {
+    console.error("Failed to join squad by code in Firebase:", e);
+    return null;
+  }
+}
+
+export async function getSquadMembers(memberIds: string[]): Promise<any[]> {
+  if (memberIds.length === 0) return [];
+  try {
+    const members: any[] = [];
+    // Firestore 'in' query supports max 10 items
+    const chunks = [];
+    for (let i = 0; i < memberIds.length; i += 10) {
+      chunks.push(memberIds.slice(i, i + 10));
+    }
+    for (const chunk of chunks) {
+      const q = query(collection(db, 'users'), where('uid', 'in', chunk));
+      const snap = await getDocs(q);
+      snap.forEach((d) => members.push(d.data()));
+    }
+    members.sort((a, b) => (b.points || 0) - (a.points || 0));
+    return members.map((m, i) => ({ ...m, rank: i + 1 }));
+  } catch (e) {
+    console.error("Failed to fetch squad members from Firebase:", e);
+    return [];
+  }
+}
+
+export async function sendSquadInvite(
+  squadId: string,
+  squadName: string,
+  inviterUid: string,
+  inviterUsername: string,
+  inviteeEmail: string
+): Promise<boolean> {
+  try {
+    const inviteRef = doc(collection(db, 'squadInvites'));
+    await setDoc(inviteRef, {
+      id: inviteRef.id,
+      squadId,
+      squadName,
+      inviterUid,
+      inviterUsername,
+      inviteeEmail: inviteeEmail.toLowerCase().trim(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (e) {
+    console.error("Failed to send squad invite in Firebase:", e);
+    return false;
+  }
+}
+
+export async function getPendingInvites(email: string): Promise<any[]> {
+  try {
+    const q = query(
+      collection(db, 'squadInvites'),
+      where('inviteeEmail', '==', email.toLowerCase().trim()),
+      where('status', '==', 'pending')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data());
+  } catch (e) {
+    console.error("Failed to fetch pending squad invites from Firebase:", e);
+    return [];
+  }
+}
+
+export async function respondToSquadInvite(
+  inviteId: string,
+  uid: string,
+  accept: boolean
+): Promise<boolean> {
+  try {
+    const inviteRef = doc(db, 'squadInvites', inviteId);
+    const inviteSnap = await getDoc(inviteRef);
+    if (!inviteSnap.exists()) return false;
+
+    const invite = inviteSnap.data();
+    await updateDoc(inviteRef, { status: accept ? 'accepted' : 'declined' });
+
+    if (accept && invite.squadId) {
+      const result = await joinSquadByCode('', uid); // We don't need code; join directly
+      // Direct join without code
+      const squadRef = doc(db, 'squads', invite.squadId);
+      const squadSnap = await getDoc(squadRef);
+      if (squadSnap.exists()) {
+        const memberIds: string[] = squadSnap.data().memberIds || [];
+        if (!memberIds.includes(uid)) {
+          memberIds.push(uid);
+          await updateDoc(squadRef, { memberIds });
+        }
+        await updateDoc(doc(db, 'users', uid), { squadId: invite.squadId });
+      }
+    }
+    return true;
+  } catch (e) {
+    console.error("Failed to respond to squad invite in Firebase:", e);
+    return false;
+  }
+}
